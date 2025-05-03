@@ -311,3 +311,40 @@ L'API doit implementer les mesures de securite suivantes :
 3. Validation des donnees entrantes
 4. Protection CSRF
 5. Rate limiting pour prevenir les abus
+
+## Backend
+
+The backend is built with FastAPI and PostgreSQL, and implements all the API endpoints described above.
+
+### Prerequisites
+
+- Python 3.12+
+- PostgreSQL server
+
+### Setup
+
+1. cd backend
+2. Copy `.env.example` to `.env` and set your environment variables:
+   - `DATABASE_URL` (e.g. `postgresql+asyncpg://user:pass@localhost:5432/dd_db`)
+   - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+   - `SECRET_KEY` (random secret for sessions & CSRF)
+   - `BASE_URL` (e.g. `http://localhost:59430`)
+3. Create the database:
+   ```bash
+   psql -c "CREATE DATABASE dd_db;"
+   ```
+4. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+5. Run the server:
+   ```bash
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 59430
+   ```
+
+On first startup, the server will automatically create tables and seed initial users:
+- Parents: `dory.thibault@gmail.com`, `laurie.delmer@gmail.com`
+- Kids: `eleadorydelmer@gmail.com`, `joleendorydelmer@gmail.com`
+
+The API is then available at `http://localhost:59430/api`.
+

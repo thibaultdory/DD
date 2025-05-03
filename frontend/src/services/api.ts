@@ -23,11 +23,12 @@ import {
 } from '../mocks/mockData';
 
 // Configuration pour basculer entre les données mock et l'API réelle
-const USE_MOCK_DATA = true;
-const API_BASE_URL = 'http://localhost:3000/api';
+const USE_MOCK_DATA = false;
+const API_BASE_URL = 'http://localhost:59430/api';
 
 // Créer une instance axios pour l'API réelle
 const api = axios.create({
+  withCredentials: true,
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
