@@ -5,12 +5,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 
-import uuid
-from sqlalchemy import Column, String, Date, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
-from app.models.base import Base
-
 class RuleViolation(Base):
     __tablename__ = "rule_violations"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -22,4 +16,4 @@ class RuleViolation(Base):
 
     child = relationship("User", foreign_keys=[child_id])
     reporter = relationship("User", foreign_keys=[reported_by])
-    contract = relationship("Contract", foreign_keys=[rule_id])
+    contract = relationship("ContractRule", foreign_keys=[rule_id])
