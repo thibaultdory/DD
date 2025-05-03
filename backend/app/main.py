@@ -1,0 +1,78 @@
+import uvicorn
+from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.middleware import SlowAPIMiddleware
+from fastapi_csrf_protect import CsrfProtect
+from app.core.config import settings
+from app.core.database import init_db
+from app.core.initial_data import seed_initial_data
+from app.core.jobs import process_daily_rewards
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from app.routers.auth import router as auth_router
+from app.routers.users import router as users_router
+from app.routers.tasks import router as tasks_router
+from app.routers.privileges import router as privileges_router
+from app.routers.rule_violations import router as rule_violations_router
+from app.routers.contracts import router as contracts_router
+from app.routers.wallets import router as wallets_router
+
+app = FastAPI(title="Assistant de Vie Familiale Backend")
+
+# Session middleware for OAuth and CSRF
+app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
+# CSRF configuration
+@CsrfProtect.load_config
+def get_csrf_config():
+    return settings
+
+# Include routers
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(users_router, prefix="/api", tags=["users"])
+app.include_router(tasks_router, prefix="/api", tags=["tasks"])
+app.include_router(privileges_router, prefix="/api", tags=["privileges"])
+app.include_router(rule_violations_router, prefix="/api", tags=["rule-violations"])
+app.include_router(contracts_router, prefix="/api", tags=["contracts"])
+app.include_router(wallets_router, prefix="/api", tags=["wallets"])
+# Rules endpoints
+from app.routers.rules import router as rules_router
+app.include_router(rules_router, prefix="/api", tags=["rules"])
+
+@app.on_event("startup")
+async def startup():
+    # Create tables and seed initial data
+    await init_db()
+    await seed_initial_data()
+    # Schedule daily rewards at midnight
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(process_daily_rewards, 'cron', hour=0, minute=0)
+    scheduler.start()
+
+@app.get("/")
+async def root():
+    return {"message": "Assistant de Vie Familiale API is running"}
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=59430,
+        reload=True,
+    )
