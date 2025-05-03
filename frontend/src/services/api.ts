@@ -24,7 +24,7 @@ import {
 
 // Configuration pour basculer entre les données mock et l'API réelle
 const USE_MOCK_DATA = false;
-const API_BASE_URL = 'http://localhost:59430/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:59430/api';
 
 // Créer une instance axios pour l'API réelle
 const api = axios.create({

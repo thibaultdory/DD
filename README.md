@@ -348,3 +348,40 @@ On first startup, the server will automatically create tables and seed initial u
 
 The API is then available at `http://localhost:59430/api`.
 
+## Docker
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Setup
+
+1. Copy environment variables for the backend:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   # Edit backend/.env to set your Google OAuth credentials and SECRET_KEY
+   ```
+2. (Optional) Edit `docker-compose.yml` to adjust environment variables under the `backend` service, for example:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `SECRET_KEY`
+3. Build and start all services:
+
+   ```bash
+   docker-compose up --build
+   ```
+
+The services will be accessible at:
+
+- Frontend: http://localhost:54287
+- Backend API: http://localhost:56000/api
+
+To stop the services:
+
+```bash
+docker-compose down
+```
+
+
