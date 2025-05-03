@@ -35,7 +35,7 @@ async def get_user_privileges(user_id: UUID, current_user: User = Depends(get_cu
     return [serialize_priv(p) for p in privs]
 
 @router.get("/privileges/date/{date_str}")
-async def get_privileges_by_date(date_str: str, parent: Depends(require_parent), db: AsyncSession = Depends(get_db)):
+async def get_privileges_by_date(date_str: str, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
     from datetime import date
     try:
         day = date.fromisoformat(date_str)
