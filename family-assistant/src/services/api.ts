@@ -6,7 +6,8 @@ import {
   RuleViolation, 
   Contract, 
   Wallet, 
-  WalletTransaction 
+  WalletTransaction,
+  Rule
 } from '../types';
 import { 
   mockUsers, 
@@ -15,7 +16,10 @@ import {
   mockRuleViolations, 
   mockContracts, 
   mockWallets,
-  mockWalletTransactions
+  mockWalletTransactions,
+  mockRules,
+  findUserById,
+  findRuleById
 } from '../mocks/mockData';
 
 // Configuration pour basculer entre les données mock et l'API réelle
@@ -29,6 +33,23 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Événements pour notifier les changements de données
+type DataChangeListener = () => void;
+const listeners: { [key: string]: DataChangeListener[] } = {
+  tasks: [],
+  privileges: [],
+  violations: [],
+  contracts: [],
+  wallets: []
+};
+
+// Fonction pour notifier les changements
+const notifyChange = (dataType: string) => {
+  if (listeners[dataType]) {
+    listeners[dataType].forEach(listener => listener());
+  }
+};
 
 // Service d'authentification
 export const authService = {
@@ -73,12 +94,47 @@ export const authService = {
   }
 };
 
+// Service de gestion des règles
+export const ruleService = {
+  // Récupérer toutes les règles
+  async getRules(): Promise<Rule[]> {
+    if (USE_MOCK_DATA) {
+      return mockRules;
+    }
+    
+    const response = await api.get('/rules');
+    return response.data;
+  },
+
+  // Récupérer une règle par ID
+  async getRule(ruleId: string): Promise<Rule | null> {
+    if (USE_MOCK_DATA) {
+      const rule = findRuleById(ruleId);
+      return rule || null;
+    }
+    
+    const response = await api.get(`/rules/${ruleId}`);
+    return response.data;
+  }
+};
+
 // Service de gestion des tâches
 export const taskService = {
+  // S'abonner aux changements de tâches
+  subscribe(listener: DataChangeListener) {
+    listeners.tasks.push(listener);
+    return () => {
+      const index = listeners.tasks.indexOf(listener);
+      if (index !== -1) {
+        listeners.tasks.splice(index, 1);
+      }
+    };
+  },
+
   // Récupérer toutes les tâches
   async getTasks(): Promise<Task[]> {
     if (USE_MOCK_DATA) {
-      return mockTasks;
+      return [...mockTasks]; // Retourne une copie pour éviter les modifications directes
     }
     
     const response = await api.get('/tasks');
@@ -95,6 +151,16 @@ export const taskService = {
     return response.data;
   },
 
+  // Récupérer les tâches pour une date spécifique
+  async getTasksForDate(date: string): Promise<Task[]> {
+    if (USE_MOCK_DATA) {
+      return mockTasks.filter(task => task.dueDate === date);
+    }
+    
+    const response = await api.get(`/tasks/date/${date}`);
+    return response.data;
+  },
+
   // Créer une nouvelle tâche (parents uniquement)
   async createTask(task: Omit<Task, 'id' | 'createdAt'>): Promise<Task> {
     if (USE_MOCK_DATA) {
@@ -104,6 +170,7 @@ export const taskService = {
         createdAt: new Date().toISOString().split('T')[0]
       };
       mockTasks.push(newTask);
+      notifyChange('tasks');
       return newTask;
     }
     
@@ -117,6 +184,7 @@ export const taskService = {
       const index = mockTasks.findIndex(t => t.id === taskId);
       if (index !== -1) {
         mockTasks[index] = { ...mockTasks[index], ...updates };
+        notifyChange('tasks');
         return mockTasks[index];
       }
       throw new Error('Task not found');
@@ -132,6 +200,7 @@ export const taskService = {
       const index = mockTasks.findIndex(t => t.id === taskId);
       if (index !== -1) {
         mockTasks[index].completed = true;
+        notifyChange('tasks');
         return mockTasks[index];
       }
       throw new Error('Task not found');
@@ -147,6 +216,7 @@ export const taskService = {
       const index = mockTasks.findIndex(t => t.id === taskId);
       if (index !== -1) {
         mockTasks.splice(index, 1);
+        notifyChange('tasks');
         return;
       }
       throw new Error('Task not found');
@@ -158,10 +228,21 @@ export const taskService = {
 
 // Service de gestion des privilèges
 export const privilegeService = {
+  // S'abonner aux changements de privilèges
+  subscribe(listener: DataChangeListener) {
+    listeners.privileges.push(listener);
+    return () => {
+      const index = listeners.privileges.indexOf(listener);
+      if (index !== -1) {
+        listeners.privileges.splice(index, 1);
+      }
+    };
+  },
+
   // Récupérer tous les privilèges
   async getPrivileges(): Promise<Privilege[]> {
     if (USE_MOCK_DATA) {
-      return mockPrivileges;
+      return [...mockPrivileges]; // Retourne une copie pour éviter les modifications directes
     }
     
     const response = await api.get('/privileges');
@@ -178,6 +259,16 @@ export const privilegeService = {
     return response.data;
   },
 
+  // Récupérer les privilèges pour une date spécifique
+  async getPrivilegesForDate(date: string): Promise<Privilege[]> {
+    if (USE_MOCK_DATA) {
+      return mockPrivileges.filter(priv => priv.date === date);
+    }
+    
+    const response = await api.get(`/privileges/date/${date}`);
+    return response.data;
+  },
+
   // Créer un nouveau privilège (parents uniquement)
   async createPrivilege(privilege: Omit<Privilege, 'id'>): Promise<Privilege> {
     if (USE_MOCK_DATA) {
@@ -186,6 +277,7 @@ export const privilegeService = {
         id: `priv${mockPrivileges.length + 1}`
       };
       mockPrivileges.push(newPrivilege);
+      notifyChange('privileges');
       return newPrivilege;
     }
     
@@ -199,6 +291,7 @@ export const privilegeService = {
       const index = mockPrivileges.findIndex(p => p.id === privilegeId);
       if (index !== -1) {
         mockPrivileges[index] = { ...mockPrivileges[index], ...updates };
+        notifyChange('privileges');
         return mockPrivileges[index];
       }
       throw new Error('Privilege not found');
@@ -214,6 +307,7 @@ export const privilegeService = {
       const index = mockPrivileges.findIndex(p => p.id === privilegeId);
       if (index !== -1) {
         mockPrivileges.splice(index, 1);
+        notifyChange('privileges');
         return;
       }
       throw new Error('Privilege not found');
@@ -225,10 +319,21 @@ export const privilegeService = {
 
 // Service de gestion des infractions aux règles
 export const ruleViolationService = {
+  // S'abonner aux changements d'infractions
+  subscribe(listener: DataChangeListener) {
+    listeners.violations.push(listener);
+    return () => {
+      const index = listeners.violations.indexOf(listener);
+      if (index !== -1) {
+        listeners.violations.splice(index, 1);
+      }
+    };
+  },
+
   // Récupérer toutes les infractions
   async getRuleViolations(): Promise<RuleViolation[]> {
     if (USE_MOCK_DATA) {
-      return mockRuleViolations;
+      return [...mockRuleViolations]; // Retourne une copie pour éviter les modifications directes
     }
     
     const response = await api.get('/rule-violations');
@@ -245,6 +350,16 @@ export const ruleViolationService = {
     return response.data;
   },
 
+  // Récupérer les infractions pour une date spécifique
+  async getRuleViolationsForDate(date: string): Promise<RuleViolation[]> {
+    if (USE_MOCK_DATA) {
+      return mockRuleViolations.filter(violation => violation.date === date);
+    }
+    
+    const response = await api.get(`/rule-violations/date/${date}`);
+    return response.data;
+  },
+
   // Créer une nouvelle infraction (parents uniquement)
   async createRuleViolation(violation: Omit<RuleViolation, 'id'>): Promise<RuleViolation> {
     if (USE_MOCK_DATA) {
@@ -253,6 +368,7 @@ export const ruleViolationService = {
         id: `violation${mockRuleViolations.length + 1}`
       };
       mockRuleViolations.push(newViolation);
+      notifyChange('violations');
       return newViolation;
     }
     
@@ -266,6 +382,7 @@ export const ruleViolationService = {
       const index = mockRuleViolations.findIndex(v => v.id === violationId);
       if (index !== -1) {
         mockRuleViolations.splice(index, 1);
+        notifyChange('violations');
         return;
       }
       throw new Error('Rule violation not found');
@@ -277,10 +394,21 @@ export const ruleViolationService = {
 
 // Service de gestion des contrats
 export const contractService = {
+  // S'abonner aux changements de contrats
+  subscribe(listener: DataChangeListener) {
+    listeners.contracts.push(listener);
+    return () => {
+      const index = listeners.contracts.indexOf(listener);
+      if (index !== -1) {
+        listeners.contracts.splice(index, 1);
+      }
+    };
+  },
+
   // Récupérer tous les contrats
   async getContracts(): Promise<Contract[]> {
     if (USE_MOCK_DATA) {
-      return mockContracts;
+      return [...mockContracts]; // Retourne une copie pour éviter les modifications directes
     }
     
     const response = await api.get('/contracts');
@@ -294,7 +422,7 @@ export const contractService = {
       if (!contract) {
         throw new Error('Contract not found');
       }
-      return contract;
+      return { ...contract }; // Retourne une copie pour éviter les modifications directes
     }
     
     const response = await api.get(`/contracts/${contractId}`);
@@ -319,6 +447,7 @@ export const contractService = {
         id: `contract${mockContracts.length + 1}`
       };
       mockContracts.push(newContract);
+      notifyChange('contracts');
       return newContract;
     }
     
@@ -332,6 +461,7 @@ export const contractService = {
       const index = mockContracts.findIndex(c => c.id === contractId);
       if (index !== -1) {
         mockContracts[index] = { ...mockContracts[index], ...updates };
+        notifyChange('contracts');
         return mockContracts[index];
       }
       throw new Error('Contract not found');
@@ -347,6 +477,7 @@ export const contractService = {
       const index = mockContracts.findIndex(c => c.id === contractId);
       if (index !== -1) {
         mockContracts[index].active = false;
+        notifyChange('contracts');
         return mockContracts[index];
       }
       throw new Error('Contract not found');
@@ -359,6 +490,17 @@ export const contractService = {
 
 // Service de gestion des portefeuilles
 export const walletService = {
+  // S'abonner aux changements de portefeuilles
+  subscribe(listener: DataChangeListener) {
+    listeners.wallets.push(listener);
+    return () => {
+      const index = listeners.wallets.indexOf(listener);
+      if (index !== -1) {
+        listeners.wallets.splice(index, 1);
+      }
+    };
+  },
+
   // Récupérer le portefeuille d'un enfant
   async getChildWallet(childId: string): Promise<Wallet> {
     if (USE_MOCK_DATA) {
@@ -366,7 +508,7 @@ export const walletService = {
       if (!wallet) {
         throw new Error('Wallet not found');
       }
-      return wallet;
+      return { ...wallet, transactions: [...wallet.transactions] }; // Retourne une copie pour éviter les modifications directes
     }
     
     const response = await api.get(`/wallets/${childId}`);
@@ -411,7 +553,8 @@ export const walletService = {
       wallet.balance -= amount;
       wallet.transactions.push(newTransaction);
       
-      return wallet;
+      notifyChange('wallets');
+      return { ...wallet, transactions: [...wallet.transactions] };
     }
     
     const response = await api.post(`/wallets/${childId}/convert`, { amount });

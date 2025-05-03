@@ -1,30 +1,86 @@
 # Assistant de Vie Familiale
 
-Application de gestion familiale permettant de gerer les taches, privileges, contrats et portefeuilles des enfants.
+## Description du projet
 
-## Fonctionnalites
+L'Assistant de Vie Familiale est une application web concue pour aider les familles a gerer les taches quotidiennes, les privileges et les regles etablies entre parents et enfants. L'application permet de creer un systeme de recompenses base sur le respect des regles et l'accomplissement des taches.
 
-- Gestion des profils parents et enfants
-- Calendrier avec vue personnelle ou familiale
-- Gestion des taches assignees aux enfants
-- Gestion des privileges
-- Suivi des infractions aux regles
-- Gestion des contrats entre parents et enfants
-- Portefeuille virtuel pour les enfants
+### Fonctionnalites principales
 
-## Installation
+- **Gestion des profils** : Parents et enfants avec nom et date de naissance
+- **Calendrier** : Affichage des taches, privileges et infractions en vue personnelle ou familiale
+- **Taches** : 
+  - Assignation de taches aux enfants par les parents
+  - Suivi de l'etat des taches (fait/pas fait)
+  - Possibilite pour chaque personne de marquer ses taches comme terminees
+- **Privileges** : 
+  - Attribution de privileges aux enfants (ex: dessert, temps d'ecran)
+  - Statut des privileges (merite/non merite)
+- **Regles et infractions** : 
+  - Enregistrement des infractions aux regles etablies
+  - Historique des infractions
+- **Contrats** : 
+  - Definition d'un ensemble de regles structurees entre parents et enfants
+  - Recompenses automatiques lorsque toutes les conditions sont remplies
+- **Portefeuille virtuel** : 
+  - Suivi du solde accumule par chaque enfant
+  - Historique des transactions
+  - Conversion des euros virtuels en euros reels par les parents
+
+### Exemple de contrat
+
+**Contrat entre Elea et papa** :  
+Elea recevra 1€ chaque jour ou elle remplira les conditions suivantes :
+- pas peter pres des autres  
+- pas de doigt dans le nez ni la bouche  
+- pas de crise  
+- pas roter  
+- pas sortir de son lit le soir  
+- faire toutes les taches du tableau  
+- pas de violence  
+
+Ce contrat prendra fin le 1er Juillet 2025.
+
+## Installation et configuration
+
+### Prerequis
+
+- Node.js (v14 ou superieur)
+- npm (v6 ou superieur)
+
+### Installation
+
+1. Clonez le depot :
+   ```bash
+   git clone https://github.com/votre-utilisateur/family-assistant.git
+   cd family-assistant
+   ```
+
+2. Installez les dependances :
+   ```bash
+   npm install
+   ```
+
+### Lancement de l'application
+
+Pour demarrer l'application en mode developpement :
 
 ```bash
-# Installer les dependances
-npm install
-
-# Lancer l'application en mode developpement
 npm run dev
+```
+
+L'application sera accessible a l'adresse [http://localhost:5173](http://localhost:5173).
+
+Pour construire l'application pour la production :
+
+```bash
+npm run build
 ```
 
 ## Configuration
 
-L'application utilise un mode "mock data" par defaut pour faciliter le developpement. Pour basculer vers l'API reelle, modifiez la variable `USE_MOCK_DATA` dans le fichier `src/services/api.ts`.
+L'application utilise un mode "mock data" par defaut pour faciliter le developpement et les tests sans avoir besoin d'un backend fonctionnel. Ce mode peut etre active/desactive dans le fichier `src/services/api.ts` en modifiant la constante `USE_MOCK_DATA`.
+
+L'authentification est realisee via OAuth avec des comptes Google.
 
 ## Specification de l'API Backend
 
@@ -66,6 +122,12 @@ L'application frontend communique avec un backend via les endpoints suivants :
 - **Reponse** : Liste des taches assignees a l'utilisateur
 - **Format de reponse** : `Task[]`
 
+#### `GET /api/tasks/date/:date`
+- **Description** : Recupere les taches pour une date specifique
+- **Parametres** : `date` - Date au format YYYY-MM-DD
+- **Reponse** : Liste des taches pour cette date
+- **Format de reponse** : `Task[]`
+
 #### `POST /api/tasks`
 - **Description** : Cree une nouvelle tache (accessible uniquement aux parents)
 - **Corps de la requete** : Donnees de la tache sans ID ni date de creation
@@ -105,6 +167,12 @@ L'application frontend communique avec un backend via les endpoints suivants :
 - **Reponse** : Liste des privileges de l'utilisateur
 - **Format de reponse** : `Privilege[]`
 
+#### `GET /api/privileges/date/:date`
+- **Description** : Recupere les privileges pour une date specifique
+- **Parametres** : `date` - Date au format YYYY-MM-DD
+- **Reponse** : Liste des privileges pour cette date
+- **Format de reponse** : `Privilege[]`
+
 #### `POST /api/privileges`
 - **Description** : Cree un nouveau privilege (accessible uniquement aux parents)
 - **Corps de la requete** : Donnees du privilege sans ID
@@ -136,6 +204,12 @@ L'application frontend communique avec un backend via les endpoints suivants :
 - **Description** : Recupere les infractions aux regles d'un enfant specifique
 - **Parametres** : `childId` - ID de l'enfant
 - **Reponse** : Liste des infractions de l'enfant
+- **Format de reponse** : `RuleViolation[]`
+
+#### `GET /api/rule-violations/date/:date`
+- **Description** : Recupere les infractions aux regles pour une date specifique
+- **Parametres** : `date` - Date au format YYYY-MM-DD
+- **Reponse** : Liste des infractions pour cette date
 - **Format de reponse** : `RuleViolation[]`
 
 #### `POST /api/rule-violations`

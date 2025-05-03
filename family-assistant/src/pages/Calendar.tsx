@@ -19,7 +19,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button
+  Button,
+  Avatar
 } from '@mui/material';
 import { 
   CheckCircle, 
@@ -33,8 +34,13 @@ import {
 import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, Privilege, RuleViolation, User } from '../types';
-import { taskService, privilegeService, ruleViolationService } from '../services/api';
+import { Task, Privilege, RuleViolation, User, Rule } from '../types';
+import { 
+  taskService, 
+  privilegeService, 
+  ruleViolationService, 
+  ruleService 
+} from '../services/api';
 import Layout from '../components/Layout/Layout';
 
 const Calendar: React.FC = () => {
@@ -42,29 +48,47 @@ const Calendar: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedItemType, setSelectedItemType] = useState<'task' | 'privilege' | 'violation' | null>(null);
+
+  // Récupérer les enfants de la famille
+  const children = authState.family.filter(user => !user.isParent);
 
   // Générer les jours de la semaine
   const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
   const weekDays = [...Array(7)].map((_, i) => addDays(startOfCurrentWeek, i));
 
   useEffect(() => {
+    // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
+    if (authState.currentUser?.isParent && children.length > 0 && !selectedChild && viewMode === 'personal') {
+      setSelectedChild(children[0].id);
+    }
+  }, [authState.currentUser, children, selectedChild, viewMode]);
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         if (authState.currentUser) {
+          // Récupérer les règles (communes à tous)
+          const fetchedRules = await ruleService.getRules();
+          setRules(fetchedRules);
+
           let fetchedTasks: Task[] = [];
           let fetchedPrivileges: Privilege[] = [];
           let fetchedViolations: RuleViolation[] = [];
 
           if (viewMode === 'personal') {
             // Vue personnelle
-            const userId = authState.currentUser.id;
+            const userId = authState.currentUser.isParent && selectedChild 
+              ? selectedChild 
+              : authState.currentUser.id;
+            
             fetchedTasks = await taskService.getUserTasks(userId);
             fetchedPrivileges = await privilegeService.getUserPrivileges(userId);
             fetchedViolations = await ruleViolationService.getChildRuleViolations(userId);
@@ -87,7 +111,53 @@ const Calendar: React.FC = () => {
     };
 
     fetchData();
-  }, [authState.currentUser, viewMode]);
+
+    // S'abonner aux changements de données
+    const unsubscribeTasks = taskService.subscribe(() => {
+      if (authState.currentUser) {
+        if (viewMode === 'personal') {
+          const userId = authState.currentUser.isParent && selectedChild 
+            ? selectedChild 
+            : authState.currentUser.id;
+          taskService.getUserTasks(userId).then(setTasks);
+        } else {
+          taskService.getTasks().then(setTasks);
+        }
+      }
+    });
+
+    const unsubscribePrivileges = privilegeService.subscribe(() => {
+      if (authState.currentUser) {
+        if (viewMode === 'personal') {
+          const userId = authState.currentUser.isParent && selectedChild 
+            ? selectedChild 
+            : authState.currentUser.id;
+          privilegeService.getUserPrivileges(userId).then(setPrivileges);
+        } else {
+          privilegeService.getPrivileges().then(setPrivileges);
+        }
+      }
+    });
+
+    const unsubscribeViolations = ruleViolationService.subscribe(() => {
+      if (authState.currentUser) {
+        if (viewMode === 'personal') {
+          const userId = authState.currentUser.isParent && selectedChild 
+            ? selectedChild 
+            : authState.currentUser.id;
+          ruleViolationService.getChildRuleViolations(userId).then(setViolations);
+        } else {
+          ruleViolationService.getRuleViolations().then(setViolations);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeTasks();
+      unsubscribePrivileges();
+      unsubscribeViolations();
+    };
+  }, [authState.currentUser, viewMode, selectedChild]);
 
   const handleViewModeChange = (
     _: React.MouseEvent<HTMLElement>,
@@ -95,15 +165,21 @@ const Calendar: React.FC = () => {
   ) => {
     if (newMode !== null) {
       setViewMode(newMode);
+      // Réinitialiser l'enfant sélectionné si on passe en vue familiale
+      if (newMode === 'family') {
+        setSelectedChild(null);
+      }
     }
+  };
+
+  const handleChildSelect = (childId: string) => {
+    setSelectedChild(childId);
   };
 
   const handleCompleteTask = async (taskId: string) => {
     try {
       await taskService.completeTask(taskId);
-      setTasks(tasks.map(task => 
-        task.id === taskId ? { ...task, completed: true } : task
-      ));
+      // La mise à jour des tâches sera gérée par l'abonnement
     } catch (error) {
       console.error('Error completing task:', error);
     }
@@ -133,8 +209,16 @@ const Calendar: React.FC = () => {
     return violations.filter(violation => isSameDay(parseISO(violation.date), date));
   };
 
-  const getUserById = (userId: string): User | undefined => {
-    return authState.family.find(user => user.id === userId);
+  // Fonction pour obtenir le nom de l'utilisateur à partir de son ID
+  const getUserName = (userId: string): string => {
+    const user = authState.family.find(u => u.id === userId);
+    return user ? user.name : 'Inconnu';
+  };
+
+  // Fonction pour obtenir le nom de la règle à partir de son ID
+  const getRuleName = (ruleId: string): string => {
+    const rule = rules.find(r => r.id === ruleId);
+    return rule ? rule.description : ruleId;
   };
 
   if (loading) {
@@ -164,6 +248,33 @@ const Calendar: React.FC = () => {
           </ToggleButtonGroup>
         </Box>
       </Box>
+
+      {/* Sélecteur d'enfant pour les parents en vue personnelle */}
+      {authState.currentUser?.isParent && viewMode === 'personal' && children.length > 0 && (
+        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+          <Typography variant="subtitle1" sx={{ mr: 2 }}>
+            Afficher le calendrier de :
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {children.map(child => (
+              <Tooltip key={child.id} title={child.name}>
+                <Avatar
+                  src={child.profilePicture}
+                  alt={child.name}
+                  sx={{ 
+                    width: 40, 
+                    height: 40, 
+                    cursor: 'pointer',
+                    border: selectedChild === child.id ? '2px solid #1976d2' : 'none',
+                    opacity: selectedChild === child.id ? 1 : 0.6
+                  }}
+                  onClick={() => handleChildSelect(child.id)}
+                />
+              </Tooltip>
+            ))}
+          </Box>
+        </Box>
+      )}
 
       <TableContainer component={Paper}>
         <Table>
@@ -228,7 +339,7 @@ const Calendar: React.FC = () => {
                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                 {viewMode === 'family' && (
                                   <Chip 
-                                    label={getUserById(task.assignedTo[0])?.name || 'Inconnu'} 
+                                    label={getUserName(task.assignedTo[0])} 
                                     size="small" 
                                     sx={{ mr: 0.5 }}
                                   />
@@ -241,7 +352,7 @@ const Calendar: React.FC = () => {
                                     <Info fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                                {!task.completed && !authState.currentUser?.isParent && (
+                                {!task.completed && (
                                   <Tooltip title="Marquer comme terminé">
                                     <IconButton 
                                       size="small" 
@@ -282,7 +393,7 @@ const Calendar: React.FC = () => {
                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                 {viewMode === 'family' && (
                                   <Chip 
-                                    label={getUserById(privilege.assignedTo)?.name || 'Inconnu'} 
+                                    label={getUserName(privilege.assignedTo)} 
                                     size="small" 
                                     sx={{ mr: 0.5 }}
                                   />
@@ -321,12 +432,12 @@ const Calendar: React.FC = () => {
                               }}
                             >
                               <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                                Règle enfreinte
+                                {getRuleName(violation.ruleId)}
                               </Typography>
                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                 {viewMode === 'family' && (
                                   <Chip 
-                                    label={getUserById(violation.childId)?.name || 'Inconnu'} 
+                                    label={getUserName(violation.childId)} 
                                     size="small" 
                                     sx={{ mr: 0.5 }}
                                   />
@@ -382,10 +493,10 @@ const Calendar: React.FC = () => {
                 <strong>Date d'échéance:</strong> {selectedItem.dueDate}
               </Typography>
               <Typography variant="body2">
-                <strong>Assigné à:</strong> {selectedItem.assignedTo.map((id: string) => getUserById(id)?.name).join(', ')}
+                <strong>Assigné à:</strong> {selectedItem.assignedTo.map((id: string) => getUserName(id)).join(', ')}
               </Typography>
               <Typography variant="body2">
-                <strong>Créé par:</strong> {getUserById(selectedItem.createdBy)?.name}
+                <strong>Créé par:</strong> {getUserName(selectedItem.createdBy)}
               </Typography>
             </>
           )}
@@ -405,14 +516,14 @@ const Calendar: React.FC = () => {
                 <strong>Date:</strong> {selectedItem.date}
               </Typography>
               <Typography variant="body2">
-                <strong>Assigné à:</strong> {getUserById(selectedItem.assignedTo)?.name}
+                <strong>Assigné à:</strong> {getUserName(selectedItem.assignedTo)}
               </Typography>
             </>
           )}
 
           {selectedItem && selectedItemType === 'violation' && (
             <>
-              <Typography variant="h6">Infraction aux règles</Typography>
+              <Typography variant="h6">Infraction: {getRuleName(selectedItem.ruleId)}</Typography>
               {selectedItem.description && (
                 <Typography variant="body1" paragraph>
                   {selectedItem.description}
@@ -422,17 +533,17 @@ const Calendar: React.FC = () => {
                 <strong>Date:</strong> {selectedItem.date}
               </Typography>
               <Typography variant="body2">
-                <strong>Enfant:</strong> {getUserById(selectedItem.childId)?.name}
+                <strong>Enfant:</strong> {getUserName(selectedItem.childId)}
               </Typography>
               <Typography variant="body2">
-                <strong>Signalé par:</strong> {getUserById(selectedItem.reportedBy)?.name}
+                <strong>Signalé par:</strong> {getUserName(selectedItem.reportedBy)}
               </Typography>
             </>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDetails}>Fermer</Button>
-          {selectedItemType === 'task' && !selectedItem.completed && !authState.currentUser?.isParent && (
+          {selectedItemType === 'task' && !selectedItem.completed && (
             <Button 
               onClick={() => {
                 handleCompleteTask(selectedItem.id);

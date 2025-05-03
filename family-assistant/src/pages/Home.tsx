@@ -1,31 +1,112 @@
 import React, { useEffect, useState } from 'react';
-import { Typography, Grid, Paper, Box, Chip, Button, List, ListItem, ListItemText, ListItemIcon, Divider } from '@mui/material';
-import { CheckCircle, Cancel, Assignment, EmojiEvents, Warning } from '@mui/icons-material';
+import { 
+  Typography, 
+  Grid, 
+  Paper, 
+  Box, 
+  Chip, 
+  Button, 
+  List, 
+  ListItem, 
+  ListItemText, 
+  ListItemIcon, 
+  Divider,
+  Tabs,
+  Tab,
+  Avatar,
+  IconButton,
+  Tooltip
+} from '@mui/material';
+import { 
+  CheckCircle, 
+  Cancel, 
+  Assignment, 
+  EmojiEvents, 
+  Warning,
+  Person,
+  Check
+} from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, Privilege, RuleViolation } from '../types';
-import { taskService, privilegeService, ruleViolationService } from '../services/api';
+import { Task, Privilege, RuleViolation, User, Rule } from '../types';
+import { 
+  taskService, 
+  privilegeService, 
+  ruleViolationService, 
+  ruleService 
+} from '../services/api';
 import Layout from '../components/Layout/Layout';
+import { findUserById, findRuleById } from '../mocks/mockData';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+const TabPanel = (props: TabPanelProps) => {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ pt: 2 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+};
 
 const Home: React.FC = () => {
   const { authState } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedChild, setSelectedChild] = useState<string | null>(null);
+  const [tabValue, setTabValue] = useState(0);
+
+  // Récupérer les enfants de la famille
+  const children = authState.family.filter(user => !user.isParent);
+
+  useEffect(() => {
+    // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
+    if (authState.currentUser?.isParent && children.length > 0 && !selectedChild) {
+      setSelectedChild(children[0].id);
+    }
+  }, [authState.currentUser, children, selectedChild]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         if (authState.currentUser) {
+          // Récupérer les règles (communes à tous)
+          const fetchedRules = await ruleService.getRules();
+          setRules(fetchedRules);
+
           let userTasks: Task[] = [];
           let userPrivileges: Privilege[] = [];
           let userViolations: RuleViolation[] = [];
 
           if (authState.currentUser.isParent) {
-            // Les parents voient toutes les tâches, privilèges et infractions
-            userTasks = await taskService.getTasks();
-            userPrivileges = await privilegeService.getPrivileges();
-            userViolations = await ruleViolationService.getRuleViolations();
+            if (selectedChild) {
+              // Les parents voient les tâches, privilèges et infractions de l'enfant sélectionné
+              userTasks = await taskService.getUserTasks(selectedChild);
+              userPrivileges = await privilegeService.getUserPrivileges(selectedChild);
+              userViolations = await ruleViolationService.getChildRuleViolations(selectedChild);
+            } else {
+              // Si aucun enfant n'est sélectionné, afficher toutes les tâches
+              userTasks = await taskService.getTasks();
+              userPrivileges = await privilegeService.getPrivileges();
+              userViolations = await ruleViolationService.getRuleViolations();
+            }
           } else {
             // Les enfants ne voient que leurs propres tâches, privilèges et infractions
             userTasks = await taskService.getUserTasks(authState.currentUser.id);
@@ -45,17 +126,78 @@ const Home: React.FC = () => {
     };
 
     fetchData();
-  }, [authState.currentUser]);
+
+    // S'abonner aux changements de données
+    const unsubscribeTasks = taskService.subscribe(() => {
+      if (authState.currentUser) {
+        if (authState.currentUser.isParent && selectedChild) {
+          taskService.getUserTasks(selectedChild).then(setTasks);
+        } else if (!authState.currentUser.isParent) {
+          taskService.getUserTasks(authState.currentUser.id).then(setTasks);
+        } else {
+          taskService.getTasks().then(setTasks);
+        }
+      }
+    });
+
+    const unsubscribePrivileges = privilegeService.subscribe(() => {
+      if (authState.currentUser) {
+        if (authState.currentUser.isParent && selectedChild) {
+          privilegeService.getUserPrivileges(selectedChild).then(setPrivileges);
+        } else if (!authState.currentUser.isParent) {
+          privilegeService.getUserPrivileges(authState.currentUser.id).then(setPrivileges);
+        } else {
+          privilegeService.getPrivileges().then(setPrivileges);
+        }
+      }
+    });
+
+    const unsubscribeViolations = ruleViolationService.subscribe(() => {
+      if (authState.currentUser) {
+        if (authState.currentUser.isParent && selectedChild) {
+          ruleViolationService.getChildRuleViolations(selectedChild).then(setViolations);
+        } else if (!authState.currentUser.isParent) {
+          ruleViolationService.getChildRuleViolations(authState.currentUser.id).then(setViolations);
+        } else {
+          ruleViolationService.getRuleViolations().then(setViolations);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribeTasks();
+      unsubscribePrivileges();
+      unsubscribeViolations();
+    };
+  }, [authState.currentUser, selectedChild]);
 
   const handleCompleteTask = async (taskId: string) => {
     try {
       await taskService.completeTask(taskId);
-      setTasks(tasks.map(task => 
-        task.id === taskId ? { ...task, completed: true } : task
-      ));
+      // La mise à jour des tâches sera gérée par l'abonnement
     } catch (error) {
       console.error('Error completing task:', error);
     }
+  };
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
+  const handleChildSelect = (childId: string) => {
+    setSelectedChild(childId);
+  };
+
+  // Fonction pour obtenir le nom de la règle à partir de son ID
+  const getRuleName = (ruleId: string): string => {
+    const rule = rules.find(r => r.id === ruleId);
+    return rule ? rule.description : ruleId;
+  };
+
+  // Fonction pour obtenir le nom de l'utilisateur à partir de son ID
+  const getUserName = (userId: string): string => {
+    const user = authState.family.find(u => u.id === userId);
+    return user ? user.name : 'Inconnu';
   };
 
   if (loading) {
@@ -73,158 +215,237 @@ const Home: React.FC = () => {
         </Typography>
       </Box>
 
-      <Grid container spacing={3}>
-        {/* Tâches */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                <Assignment sx={{ verticalAlign: 'middle', mr: 1 }} />
-                Mes tâches
-              </Typography>
-              {authState.currentUser?.isParent && (
-                <Button variant="outlined" size="small" href="/tasks/new">
-                  Ajouter
-                </Button>
-              )}
-            </Box>
-            
-            {tasks.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                Aucune tâche à afficher
-              </Typography>
-            ) : (
-              <List>
-                {tasks.map((task) => (
-                  <React.Fragment key={task.id}>
-                    <ListItem
-                      secondaryAction={
-                        !task.completed && !authState.currentUser?.isParent ? (
-                          <Button 
-                            variant="outlined" 
-                            size="small"
+      {/* Sélecteur d'enfant pour les parents */}
+      {authState.currentUser?.isParent && children.length > 0 && (
+        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+          <Typography variant="subtitle1" sx={{ mr: 2 }}>
+            Afficher les données de :
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {children.map(child => (
+              <Tooltip key={child.id} title={child.name}>
+                <Avatar
+                  src={child.profilePicture}
+                  alt={child.name}
+                  sx={{ 
+                    width: 40, 
+                    height: 40, 
+                    cursor: 'pointer',
+                    border: selectedChild === child.id ? '2px solid #1976d2' : 'none',
+                    opacity: selectedChild === child.id ? 1 : 0.6
+                  }}
+                  onClick={() => handleChildSelect(child.id)}
+                />
+              </Tooltip>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs value={tabValue} onChange={handleTabChange} aria-label="basic tabs example">
+          <Tab label="Tâches" icon={<Assignment />} iconPosition="start" />
+          <Tab label="Privilèges" icon={<EmojiEvents />} iconPosition="start" />
+          <Tab label="Infractions" icon={<Warning />} iconPosition="start" />
+        </Tabs>
+      </Box>
+
+      {/* Onglet des tâches */}
+      <TabPanel value={tabValue} index={0}>
+        <Paper sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              <Assignment sx={{ verticalAlign: 'middle', mr: 1 }} />
+              {authState.currentUser?.isParent && selectedChild 
+                ? `Tâches de ${getUserName(selectedChild)}` 
+                : 'Mes tâches'}
+            </Typography>
+            {authState.currentUser?.isParent && (
+              <Button variant="outlined" size="small" href="/tasks/new">
+                Ajouter
+              </Button>
+            )}
+          </Box>
+          
+          {tasks.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              Aucune tâche à afficher
+            </Typography>
+          ) : (
+            <List>
+              {tasks.map((task) => (
+                <React.Fragment key={task.id}>
+                  <ListItem
+                    secondaryAction={
+                      !task.completed && (
+                        <Tooltip title="Marquer comme terminé">
+                          <IconButton
+                            edge="end"
+                            aria-label="complete"
                             onClick={() => handleCompleteTask(task.id)}
                           >
-                            Terminer
-                          </Button>
-                        ) : null
+                            <Check />
+                          </IconButton>
+                        </Tooltip>
+                      )
+                    }
+                  >
+                    <ListItemIcon>
+                      {task.completed ? (
+                        <CheckCircle color="success" />
+                      ) : (
+                        <Cancel color="error" />
+                      )}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={task.title}
+                      secondary={
+                        <>
+                          {task.description && <span>{task.description}<br /></span>}
+                          <span>Échéance: {task.dueDate}</span>
+                          {authState.currentUser?.isParent && !selectedChild && (
+                            <>
+                              <br />
+                              <span>Assigné à: {task.assignedTo.map(id => getUserName(id)).join(', ')}</span>
+                            </>
+                          )}
+                        </>
                       }
-                    >
-                      <ListItemIcon>
-                        {task.completed ? (
-                          <CheckCircle color="success" />
-                        ) : (
-                          <Cancel color="error" />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={task.title}
-                        secondary={task.description}
-                        primaryTypographyProps={{
-                          style: { 
-                            textDecoration: task.completed ? 'line-through' : 'none',
-                            color: task.completed ? 'text.secondary' : 'text.primary'
-                          }
-                        }}
-                      />
-                    </ListItem>
-                    <Divider variant="inset" component="li" />
-                  </React.Fragment>
-                ))}
-              </List>
-            )}
-          </Paper>
-        </Grid>
+                      primaryTypographyProps={{
+                        style: { 
+                          textDecoration: task.completed ? 'line-through' : 'none',
+                          color: task.completed ? 'text.secondary' : 'text.primary'
+                        }
+                      }}
+                    />
+                  </ListItem>
+                  <Divider variant="inset" component="li" />
+                </React.Fragment>
+              ))}
+            </List>
+          )}
+        </Paper>
+      </TabPanel>
 
-        {/* Privilèges */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                <EmojiEvents sx={{ verticalAlign: 'middle', mr: 1 }} />
-                Privilèges
-              </Typography>
-              {authState.currentUser?.isParent && (
-                <Button variant="outlined" size="small" href="/privileges/new">
-                  Ajouter
-                </Button>
-              )}
-            </Box>
-            
-            {privileges.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                Aucun privilège à afficher
-              </Typography>
-            ) : (
-              <List>
-                {privileges.map((privilege) => (
-                  <React.Fragment key={privilege.id}>
-                    <ListItem>
-                      <ListItemIcon>
-                        {privilege.earned ? (
-                          <CheckCircle color="success" />
-                        ) : (
-                          <Cancel color="error" />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={privilege.title}
-                        secondary={privilege.description}
-                      />
-                      <Chip 
-                        label={privilege.earned ? "Mérité" : "Non mérité"} 
-                        color={privilege.earned ? "success" : "error"} 
-                        size="small" 
-                      />
-                    </ListItem>
-                    <Divider variant="inset" component="li" />
-                  </React.Fragment>
-                ))}
-              </List>
+      {/* Onglet des privilèges */}
+      <TabPanel value={tabValue} index={1}>
+        <Paper sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              <EmojiEvents sx={{ verticalAlign: 'middle', mr: 1 }} />
+              {authState.currentUser?.isParent && selectedChild 
+                ? `Privilèges de ${getUserName(selectedChild)}` 
+                : 'Mes privilèges'}
+            </Typography>
+            {authState.currentUser?.isParent && (
+              <Button variant="outlined" size="small" href="/privileges/new">
+                Ajouter
+              </Button>
             )}
-          </Paper>
-        </Grid>
+          </Box>
+          
+          {privileges.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              Aucun privilège à afficher
+            </Typography>
+          ) : (
+            <List>
+              {privileges.map((privilege) => (
+                <React.Fragment key={privilege.id}>
+                  <ListItem>
+                    <ListItemIcon>
+                      {privilege.earned ? (
+                        <CheckCircle color="success" />
+                      ) : (
+                        <Cancel color="error" />
+                      )}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={privilege.title}
+                      secondary={
+                        <>
+                          {privilege.description && <span>{privilege.description}<br /></span>}
+                          <span>Date: {privilege.date}</span>
+                          {authState.currentUser?.isParent && !selectedChild && (
+                            <>
+                              <br />
+                              <span>Assigné à: {getUserName(privilege.assignedTo)}</span>
+                            </>
+                          )}
+                        </>
+                      }
+                    />
+                    <Chip 
+                      label={privilege.earned ? "Mérité" : "Non mérité"} 
+                      color={privilege.earned ? "success" : "error"} 
+                      size="small" 
+                    />
+                  </ListItem>
+                  <Divider variant="inset" component="li" />
+                </React.Fragment>
+              ))}
+            </List>
+          )}
+        </Paper>
+      </TabPanel>
 
-        {/* Infractions aux règles */}
-        <Grid item xs={12}>
-          <Paper sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                <Warning sx={{ verticalAlign: 'middle', mr: 1 }} />
-                Infractions aux règles
-              </Typography>
-              {authState.currentUser?.isParent && (
-                <Button variant="outlined" size="small" href="/violations/new">
-                  Ajouter
-                </Button>
-              )}
-            </Box>
-            
-            {violations.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                Aucune infraction à afficher
-              </Typography>
-            ) : (
-              <List>
-                {violations.map((violation) => (
-                  <React.Fragment key={violation.id}>
-                    <ListItem>
-                      <ListItemIcon>
-                        <Warning color="warning" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={`Règle enfreinte: ${violation.ruleId}`}
-                        secondary={`${violation.date} - ${violation.description || 'Aucune description'}`}
-                      />
-                    </ListItem>
-                    <Divider variant="inset" component="li" />
-                  </React.Fragment>
-                ))}
-              </List>
+      {/* Onglet des infractions */}
+      <TabPanel value={tabValue} index={2}>
+        <Paper sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              <Warning sx={{ verticalAlign: 'middle', mr: 1 }} />
+              {authState.currentUser?.isParent && selectedChild 
+                ? `Infractions de ${getUserName(selectedChild)}` 
+                : 'Mes infractions'}
+            </Typography>
+            {authState.currentUser?.isParent && (
+              <Button variant="outlined" size="small" href="/violations/new">
+                Ajouter
+              </Button>
             )}
-          </Paper>
-        </Grid>
-      </Grid>
+          </Box>
+          
+          {violations.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              Aucune infraction à afficher
+            </Typography>
+          ) : (
+            <List>
+              {violations.map((violation) => (
+                <React.Fragment key={violation.id}>
+                  <ListItem>
+                    <ListItemIcon>
+                      <Warning color="warning" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={`Règle enfreinte: ${getRuleName(violation.ruleId)}`}
+                      secondary={
+                        <>
+                          <span>Date: {violation.date}</span>
+                          {violation.description && (
+                            <>
+                              <br />
+                              <span>Description: {violation.description}</span>
+                            </>
+                          )}
+                          {authState.currentUser?.isParent && !selectedChild && (
+                            <>
+                              <br />
+                              <span>Enfant: {getUserName(violation.childId)}</span>
+                            </>
+                          )}
+                        </>
+                      }
+                    />
+                  </ListItem>
+                  <Divider variant="inset" component="li" />
+                </React.Fragment>
+              ))}
+            </List>
+          )}
+        </Paper>
+      </TabPanel>
     </Layout>
   );
 };

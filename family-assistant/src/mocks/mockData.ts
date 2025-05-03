@@ -37,7 +37,46 @@ export const mockUsers: User[] = [
   }
 ];
 
-// Tâches mock
+// Règles centralisées
+export const mockRules: Rule[] = [
+  {
+    id: 'rule1',
+    description: 'Pas péter près des autres',
+    isTask: false
+  },
+  {
+    id: 'rule2',
+    description: 'Pas de doigt dans le nez ni la bouche',
+    isTask: false
+  },
+  {
+    id: 'rule3',
+    description: 'Pas de crise',
+    isTask: false
+  },
+  {
+    id: 'rule4',
+    description: 'Pas roter',
+    isTask: false
+  },
+  {
+    id: 'rule5',
+    description: 'Pas sortir de son lit le soir',
+    isTask: false
+  },
+  {
+    id: 'rule6',
+    description: 'Faire toutes les tâches du tableau',
+    isTask: true
+  },
+  {
+    id: 'rule7',
+    description: 'Pas de violence',
+    isTask: false
+  }
+];
+
+// Tâches mock - synchronisées avec le calendrier
 export const mockTasks: Task[] = [
   {
     id: 'task1',
@@ -78,13 +117,13 @@ export const mockTasks: Task[] = [
   }
 ];
 
-// Privilèges mock
+// Privilèges mock - avec indication claire de l'enfant assigné
 export const mockPrivileges: Privilege[] = [
   {
     id: 'priv1',
     title: 'Dessert',
     description: 'A droit au dessert ce soir',
-    assignedTo: 'child1',
+    assignedTo: 'child1', // Eléa
     earned: true,
     date: formatDate(today)
   },
@@ -92,79 +131,40 @@ export const mockPrivileges: Privilege[] = [
     id: 'priv2',
     title: 'Temps d\'écran supplémentaire',
     description: '30 minutes supplémentaires',
-    assignedTo: 'child2',
+    assignedTo: 'child2', // Lucas
     earned: false,
     date: formatDate(today)
   }
 ];
 
-// Règles mock
-export const mockRules: Rule[] = [
-  {
-    id: 'rule1',
-    description: 'Pas péter près des autres',
-    isTask: false
-  },
-  {
-    id: 'rule2',
-    description: 'Pas de doigt dans le nez ni la bouche',
-    isTask: false
-  },
-  {
-    id: 'rule3',
-    description: 'Pas de crise',
-    isTask: false
-  },
-  {
-    id: 'rule4',
-    description: 'Pas roter',
-    isTask: false
-  },
-  {
-    id: 'rule5',
-    description: 'Pas sortir de son lit le soir',
-    isTask: false
-  },
-  {
-    id: 'rule6',
-    description: 'Faire toutes les tâches du tableau',
-    isTask: true
-  },
-  {
-    id: 'rule7',
-    description: 'Pas de violence',
-    isTask: false
-  }
-];
-
-// Infractions aux règles mock
+// Infractions aux règles mock - avec référence aux règles centralisées
 export const mockRuleViolations: RuleViolation[] = [
   {
     id: 'violation1',
-    ruleId: 'rule2',
-    childId: 'child1',
+    ruleId: 'rule2', // Pas de doigt dans le nez ni la bouche
+    childId: 'child1', // Eléa
     date: formatDate(subDays(today, 2)),
     description: 'Doigt dans le nez pendant le repas',
     reportedBy: 'parent1'
   },
   {
     id: 'violation2',
-    ruleId: 'rule5',
-    childId: 'child2',
+    ruleId: 'rule5', // Pas sortir de son lit le soir
+    childId: 'child2', // Lucas
     date: formatDate(subDays(today, 1)),
     description: 'Est sorti du lit à 22h30',
     reportedBy: 'parent2'
   }
 ];
 
-// Contrats mock
+// Contrats mock - utilisant les règles centralisées
 export const mockContracts: Contract[] = [
   {
     id: 'contract1',
     title: 'Contrat entre Eléa et papa',
     childId: 'child1',
     parentId: 'parent1',
-    rules: mockRules,
+    rules: mockRules, // Toutes les règles pour Eléa
     dailyReward: 1,
     startDate: formatDate(subMonths(today, 1)),
     endDate: '2025-07-01',
@@ -175,7 +175,7 @@ export const mockContracts: Contract[] = [
     title: 'Contrat entre Lucas et maman',
     childId: 'child2',
     parentId: 'parent2',
-    rules: mockRules.slice(0, 5),
+    rules: mockRules.slice(0, 5), // Seulement les 5 premières règles pour Lucas
     dailyReward: 0.5,
     startDate: formatDate(subMonths(today, 2)),
     endDate: '2025-06-01',
@@ -231,3 +231,13 @@ export const mockWallets: Wallet[] = [
     transactions: mockWalletTransactions.filter(t => t.childId === 'child2')
   }
 ];
+
+// Fonction utilitaire pour trouver un utilisateur par ID
+export const findUserById = (userId: string): User | undefined => {
+  return mockUsers.find(user => user.id === userId);
+};
+
+// Fonction utilitaire pour trouver une règle par ID
+export const findRuleById = (ruleId: string): Rule | undefined => {
+  return mockRules.find(rule => rule.id === ruleId);
+};
