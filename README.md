@@ -51,8 +51,8 @@ Ce contrat prendra fin le 1er Juillet 2025.
 
 1. Clonez le depot :
    ```bash
-   git clone https://github.com/votre-utilisateur/family-assistant.git
-   cd family-assistant
+   git clone https://github.com/votre-utilisateur/DD.git
+   cd frontend
    ```
 
 2. Installez les dependances :
