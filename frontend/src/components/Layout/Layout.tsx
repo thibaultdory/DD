@@ -10,7 +10,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Header />
-      <Container component="main" sx={{ flexGrow: 1, py: 3 }}>
+      <Container 
+        component="main" 
+        sx={{ 
+          flexGrow: 1, 
+          py: { xs: 2, sm: 3 },
+          px: { xs: 1, sm: 2, md: 3 },
+          maxWidth: '100% !important'
+        }}
+      >
         {children}
       </Container>
       <Box component="footer" sx={{ py: 2, textAlign: 'center', bgcolor: 'background.paper' }}>
