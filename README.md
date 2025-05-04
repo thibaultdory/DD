@@ -385,3 +385,43 @@ docker-compose down
 ```
 
 
+## Database Setup with Docker
+
+Here is how to set up your PostgreSQL database when using Docker Compose:
+
+1. Make sure your Docker containers are started:
+   ```
+   docker compose up -d
+   ```
+   
+2. Connect to the PostgreSQL container:
+   ```
+   docker compose exec db psql -U user -d dd_db
+   ```
+   This uses the default credentials from the `docker-compose.yml`, where `POSTGRES_USER` is `user` and the database name (`POSTGRES_DB`) is `dd_db`.
+
+3. (Optional) Create a custom user if desired:
+   ```
+   CREATE USER dd WITH PASSWORD '12345';
+   ```
+   If you want to keep the default user, skip this step.
+
+4. Grant privileges to the new user (or any user different from the owner):
+   ```
+   GRANT ALL PRIVILEGES ON DATABASE dd_db TO dd;
+   GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO dd;
+   GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO dd;
+   ```
+   This ensures the user can read/write data on existing tables.
+
+5. Update your backend configuration to use these credentials. For example, in `backend/.env`:
+   ```
+   DATABASE_URL=postgresql+asyncpg://dd:12345@db:5432/dd_db
+   ```
+
+Now, when you run or rebuild the Docker services:
+```
+docker compose down
+docker compose up --build -d
+```
+the backend container should connect to the Postgres container with the granted privileges.
