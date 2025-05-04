@@ -32,7 +32,10 @@ async def auth_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """Handle Google OAuth2 callback, create or fetch user, store session"""
     try:
         token = await oauth.google.authorize_access_token(request)
-        user_info = await oauth.google.parse_id_token(request, token)
+        if "id_token" in token:
+            user_info = await oauth.google.parse_id_token(request, token)
+        else:
+            user_info = await oauth.google.userinfo(token=token)
     except OAuthError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth authentication failed")
 
