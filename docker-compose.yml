@@ -17,12 +17,14 @@ services:
     build:
       context: ./backend
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://user:password@db:5432/dd_db
-      GOOGLE_CLIENT_ID: your_google_client_id
-      GOOGLE_CLIENT_SECRET: your_google_client_secret
-      SECRET_KEY: your_random_secret_key
-      BASE_URL: http://localhost:56000
+      DATABASE_URL: ${DATABASE_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      SECRET_KEY: ${SECRET_KEY}
+      BASE_URL: ${BASE_URL}
     depends_on:
       - db
     ports:
