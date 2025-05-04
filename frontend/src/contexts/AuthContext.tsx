@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuthState } from '../types';
-import { authService } from '../services/api';
+import { authService, API_BASE_URL } from '../services/api';
 
 // Valeurs par défaut du contexte
 const defaultAuthState: AuthState = {
@@ -58,20 +58,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Fonction de connexion
   const login = async () => {
-    try {
-      const user = await authService.loginWithGoogle();
-      if (user) {
-        const family = await authService.getFamilyMembers();
-        setAuthState({
-          isAuthenticated: true,
-          currentUser: user,
-          family
-        });
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
+    window.location.href = `${API_BASE_URL}/auth/google`;
   };
 
   // Fonction de déconnexion
