@@ -66,15 +66,8 @@ async def auth_callback(request: Request, db: AsyncSession = Depends(get_db)):
     # Store user ID in session
     request.session["user"] = str(user.id)
 
-    # Redirect or return user info
-    return {
-        "id": str(user.id),
-        "name": user.name,
-        "email": user.email,
-        "birthDate": str(user.birth_date),
-        "isParent": user.is_parent,
-        "profilePicture": user.profile_picture,
-    }
+    # Redirect to frontend
+    return RedirectResponse(url=settings.frontend_url)
 
 @router.get("/me")
 async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
