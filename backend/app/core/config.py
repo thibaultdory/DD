@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     google_client_secret: str
     secret_key: str
     base_url: AnyUrl
+    frontend_url: str = "http://localhost:54287"  # Default to local dev frontend
 
     class Config:
         env_file = ".env"
