@@ -34,6 +34,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+export { API_BASE_URL };
 
 // Événements pour notifier les changements de données
 type DataChangeListener = () => void;
