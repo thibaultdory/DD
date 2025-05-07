@@ -149,6 +149,8 @@ const Home: React.FC = () => {
             violationsTotal = violationsResponse.total || 0;
           }
 
+          console.log('Setting tasks:', tasksData);
+          console.log('Setting total tasks:', tasksTotal);
           setTasks(tasksData);
           setTotalTasks(tasksTotal);
           setPrivileges(privilegesData);
@@ -341,6 +343,7 @@ const Home: React.FC = () => {
             )}
           </Box>
           
+          {console.log('Rendering tasks:', tasks)}
           {tasks.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               Aucune tâche à afficher
