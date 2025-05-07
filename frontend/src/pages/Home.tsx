@@ -97,13 +97,6 @@ const Home: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        console.log('Fetching data with:', {
-          isParent: authState.currentUser?.isParent,
-          selectedChild,
-          page,
-          limit
-        });
-        
         if (authState.currentUser) {
           // Récupérer les règles (communes à tous)
           const fetchedRules = await ruleService.getRules();
@@ -156,17 +149,6 @@ const Home: React.FC = () => {
             violationsTotal = violationsResponse.total || 0;
           }
 
-          console.log('Setting tasks:', tasksData);
-          console.log('Setting total tasks:', tasksTotal);
-          console.log('Setting state with:', {
-            tasksData,
-            tasksTotal,
-            privilegesData,
-            privilegesTotal,
-            violationsData,
-            violationsTotal
-          });
-          
           setTasks(tasksData);
           setTotalTasks(tasksTotal);
           setPrivileges(privilegesData);
@@ -185,26 +167,19 @@ const Home: React.FC = () => {
 
     // S'abonner aux changements de données
     const unsubscribeTasks = taskService.subscribe(() => {
-      console.log('Task change notification received');
       if (authState.currentUser) {
         if (authState.currentUser.isParent && selectedChild) {
-          console.log('Fetching tasks for selected child:', selectedChild);
           taskService.getUserTasks(selectedChild, page, limit).then(response => {
-            console.log('Updated tasks for child:', response);
             setTasks(response.tasks || []);
             setTotalTasks(response.total || 0);
           });
         } else if (!authState.currentUser.isParent) {
-          console.log('Fetching tasks for current user:', authState.currentUser.id);
           taskService.getUserTasks(authState.currentUser.id, page, limit).then(response => {
-            console.log('Updated tasks for user:', response);
             setTasks(response.tasks || []);
             setTotalTasks(response.total || 0);
           });
         } else {
-          console.log('Fetching all tasks');
           taskService.getTasks(page, limit).then(response => {
-            console.log('Updated all tasks:', response);
             setTasks(response.tasks || []);
             setTotalTasks(response.total || 0);
           });
@@ -263,9 +238,7 @@ const Home: React.FC = () => {
 
   const handleCompleteTask = async (taskId: string) => {
     try {
-      console.log('Completing task:', taskId);
       const updatedTask = await taskService.completeTask(taskId);
-      console.log('Task completed:', updatedTask);
       // La mise à jour des tâches sera gérée par l'abonnement
     } catch (error) {
       console.error('Error completing task:', error);
@@ -368,7 +341,7 @@ const Home: React.FC = () => {
             )}
           </Box>
           
-          {console.log('Rendering tasks:', tasks)}
+
           {tasks.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               Aucune tâche à afficher

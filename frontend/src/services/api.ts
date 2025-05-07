@@ -148,14 +148,12 @@ export const taskService = {
     const response = await api.get('/tasks', {
       params: { page, limit }
     });
-    console.log('API response for getTasks:', response.data);
     // Adapter la réponse au format attendu
     const tasks = Array.isArray(response.data) ? response.data : [];
     const result = {
       tasks: tasks.slice((page - 1) * limit, page * limit),
       total: tasks.length
     };
-    console.log('Adapted getTasks response:', result);
     return result;
   },
 
@@ -175,14 +173,12 @@ export const taskService = {
     const response = await api.get(`/tasks/user/${userId}`, {
       params: { page, limit }
     });
-    console.log('API response for getUserTasks:', response.data);
     // Adapter la réponse au format attendu
     const tasks = Array.isArray(response.data) ? response.data : [];
     const result = {
       tasks: tasks.slice((page - 1) * limit, page * limit),
       total: tasks.length
     };
-    console.log('Adapted getUserTasks response:', result);
     return result;
   },
 
@@ -241,15 +237,8 @@ export const taskService = {
       throw new Error('Task not found');
     }
     
-    console.log('Sending complete request for task:', taskId);
     const response = await api.put(`/tasks/${taskId}/complete`);
-    console.log('Complete task response:', response.data);
-    
-    // Forcer une mise à jour immédiate des tâches
-    setTimeout(() => {
-      console.log('Notifying task change');
-      notifyChange('tasks');
-    }, 0);
+    notifyChange('tasks');
     
     return response.data;
   },
