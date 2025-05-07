@@ -133,24 +133,53 @@ export const taskService = {
     };
   },
 
-  // Récupérer toutes les tâches
-  async getTasks(): Promise<Task[]> {
+  // Récupérer toutes les tâches avec pagination
+  async getTasks(page: number = 1, limit: number = 10): Promise<{ tasks: Task[], total: number }> {
     if (USE_MOCK_DATA) {
-      return [...mockTasks]; // Retourne une copie pour éviter les modifications directes
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedTasks = [...mockTasks].slice(start, end);
+      return {
+        tasks: paginatedTasks,
+        total: mockTasks.length
+      };
     }
     
-    const response = await api.get('/tasks');
-    return response.data;
+    const response = await api.get('/tasks', {
+      params: { page, limit }
+    });
+    // Adapter la réponse au format attendu
+    const tasks = Array.isArray(response.data) ? response.data : [];
+    const result = {
+      tasks: tasks.slice((page - 1) * limit, page * limit),
+      total: tasks.length
+    };
+    return result;
   },
 
-  // Récupérer les tâches d'un utilisateur spécifique
-  async getUserTasks(userId: string): Promise<Task[]> {
+  // Récupérer les tâches d'un utilisateur spécifique avec pagination
+  async getUserTasks(userId: string, page: number = 1, limit: number = 10): Promise<{ tasks: Task[], total: number }> {
     if (USE_MOCK_DATA) {
-      return mockTasks.filter(task => task.assignedTo.includes(userId));
+      const userTasks = mockTasks.filter(task => task.assignedTo.includes(userId));
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedTasks = userTasks.slice(start, end);
+      return {
+        tasks: paginatedTasks,
+        total: userTasks.length
+      };
     }
     
-    const response = await api.get(`/tasks/user/${userId}`);
-    return response.data;
+    const response = await api.get(`/tasks/user/${userId}`, {
+      params: { page, limit }
+    });
+    // Adapter la réponse au format attendu
+    const tasks = Array.isArray(response.data) ? response.data : [];
+    const result = {
+      tasks: tasks.slice((page - 1) * limit, page * limit),
+      total: tasks.length
+    };
+    return result;
   },
 
   // Récupérer les tâches pour une date spécifique
@@ -209,17 +238,9 @@ export const taskService = {
     }
     
     const response = await api.put(`/tasks/${taskId}/complete`);
-    const updatedTask = response.data;
-    
-    // Update the task in the local state before notifying subscribers
-    const tasks = await this.getTasks();
-    const index = tasks.findIndex(t => t.id === taskId);
-    if (index !== -1) {
-      tasks[index] = updatedTask;
-    }
     notifyChange('tasks');
     
-    return updatedTask;
+    return response.data;
   },
 
   // Supprimer une tâche (parents uniquement)
@@ -251,23 +272,40 @@ export const privilegeService = {
     };
   },
 
-  // Récupérer tous les privilèges
-  async getPrivileges(): Promise<Privilege[]> {
+  // Récupérer tous les privilèges avec pagination
+  async getPrivileges(page: number = 1, limit: number = 10): Promise<{ privileges: Privilege[], total: number }> {
     if (USE_MOCK_DATA) {
-      return [...mockPrivileges]; // Retourne une copie pour éviter les modifications directes
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedPrivileges = [...mockPrivileges].slice(start, end);
+      return {
+        privileges: paginatedPrivileges,
+        total: mockPrivileges.length
+      };
     }
     
-    const response = await api.get('/privileges');
+    const response = await api.get('/privileges', {
+      params: { page, limit }
+    });
     return response.data;
   },
 
-  // Récupérer les privilèges d'un utilisateur spécifique
-  async getUserPrivileges(userId: string): Promise<Privilege[]> {
+  // Récupérer les privilèges d'un utilisateur spécifique avec pagination
+  async getUserPrivileges(userId: string, page: number = 1, limit: number = 10): Promise<{ privileges: Privilege[], total: number }> {
     if (USE_MOCK_DATA) {
-      return mockPrivileges.filter(priv => priv.assignedTo === userId);
+      const userPrivileges = mockPrivileges.filter(priv => priv.assignedTo === userId);
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedPrivileges = userPrivileges.slice(start, end);
+      return {
+        privileges: paginatedPrivileges,
+        total: userPrivileges.length
+      };
     }
     
-    const response = await api.get(`/privileges/user/${userId}`);
+    const response = await api.get(`/privileges/user/${userId}`, {
+      params: { page, limit }
+    });
     return response.data;
   },
 
@@ -342,23 +380,40 @@ export const ruleViolationService = {
     };
   },
 
-  // Récupérer toutes les infractions
-  async getRuleViolations(): Promise<RuleViolation[]> {
+  // Récupérer toutes les infractions avec pagination
+  async getRuleViolations(page: number = 1, limit: number = 10): Promise<{ violations: RuleViolation[], total: number }> {
     if (USE_MOCK_DATA) {
-      return [...mockRuleViolations]; // Retourne une copie pour éviter les modifications directes
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedViolations = [...mockRuleViolations].slice(start, end);
+      return {
+        violations: paginatedViolations,
+        total: mockRuleViolations.length
+      };
     }
     
-    const response = await api.get('/rule-violations');
+    const response = await api.get('/rule-violations', {
+      params: { page, limit }
+    });
     return response.data;
   },
 
-  // Récupérer les infractions d'un enfant spécifique
-  async getChildRuleViolations(childId: string): Promise<RuleViolation[]> {
+  // Récupérer les infractions d'un enfant spécifique avec pagination
+  async getChildRuleViolations(childId: string, page: number = 1, limit: number = 10): Promise<{ violations: RuleViolation[], total: number }> {
     if (USE_MOCK_DATA) {
-      return mockRuleViolations.filter(violation => violation.childId === childId);
+      const childViolations = mockRuleViolations.filter(violation => violation.childId === childId);
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      const paginatedViolations = childViolations.slice(start, end);
+      return {
+        violations: paginatedViolations,
+        total: childViolations.length
+      };
     }
     
-    const response = await api.get(`/rule-violations/child/${childId}`);
+    const response = await api.get(`/rule-violations/child/${childId}`, {
+      params: { page, limit }
+    });
     return response.data;
   },
 
