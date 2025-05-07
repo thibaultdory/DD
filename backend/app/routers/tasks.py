@@ -11,12 +11,18 @@ from uuid import UUID
 
 router = APIRouter()
 
-def serialize_task(task: Task):
+async def serialize_task(task: Task, db: AsyncSession):
+    # Get assigned users directly from the association table
+    result = await db.execute(
+        select(User).join(task_assignments).where(task_assignments.c.task_id == task.id)
+    )
+    assigned_users = result.scalars().all()
+    
     return {
         "id": str(task.id),
         "title": task.title,
         "description": task.description,
-        "assignedTo": [str(u.id) for u in task.assigned_to],
+        "assignedTo": [str(u.id) for u in assigned_users],
         "dueDate": task.due_date.isoformat(),
         "completed": task.completed,
         "createdBy": str(task.created_by),
@@ -30,7 +36,7 @@ def serialize_task(task: Task):
 async def get_tasks(parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Task))
     tasks = result.scalars().all()
-    return [serialize_task(t) for t in tasks]
+    return [await serialize_task(t, db) for t in tasks]
 
 @router.get("/tasks/user/{user_id}")
 async def get_user_tasks(user_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -39,7 +45,7 @@ async def get_user_tasks(user_id: UUID, current_user: User = Depends(get_current
     stmt = select(Task).join(task_assignments).where(task_assignments.c.user_id == user_id)
     result = await db.execute(stmt)
     tasks = result.scalars().all()
-    return [serialize_task(t) for t in tasks]
+    return [await serialize_task(t, db) for t in tasks]
 
 @router.get("/tasks/date/{due_date}")
 async def get_tasks_by_date(due_date: date, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -48,7 +54,7 @@ async def get_tasks_by_date(due_date: date, current_user: User = Depends(get_cur
         stmt = stmt.join(task_assignments).where(task_assignments.c.user_id == current_user.id)
     result = await db.execute(stmt)
     tasks = result.scalars().all()
-    return [serialize_task(t) for t in tasks]
+    return [await serialize_task(t, db) for t in tasks]
 
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
@@ -122,7 +128,7 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
 
     await db.commit()
     await db.refresh(task)
-    return serialize_task(task)
+    return await serialize_task(task, db)
 
 @router.put("/tasks/{task_id}")
 async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
@@ -218,12 +224,20 @@ async def complete_task(task_id: UUID, current_user: User = Depends(get_current_
     task = await db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    if not (current_user.is_parent or current_user.id in [u.id for u in task.assigned_to]):
+    # Check if user is assigned to task
+    result = await db.execute(
+        select(task_assignments).where(
+            task_assignments.c.task_id == task.id,
+            task_assignments.c.user_id == current_user.id
+        )
+    )
+    is_assigned = result.first() is not None
+    if not (current_user.is_parent or is_assigned):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     task.completed = True
     await db.commit()
     await db.refresh(task)
-    return serialize_task(task)
+    return await serialize_task(task, db)
 
 @router.delete("/tasks/{task_id}")
 async def delete_task(
