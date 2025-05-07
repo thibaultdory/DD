@@ -86,7 +86,8 @@ export const mockTasks: Task[] = [
     dueDate: formatDate(today),
     completed: false,
     createdBy: 'parent1',
-    createdAt: formatDate(subDays(today, 1))
+    createdAt: formatDate(subDays(today, 1)),
+    isRecurring: false
   },
   {
     id: 'task2',
@@ -95,7 +96,9 @@ export const mockTasks: Task[] = [
     dueDate: formatDate(today),
     completed: true,
     createdBy: 'parent2',
-    createdAt: formatDate(subDays(today, 1))
+    createdAt: formatDate(subDays(today, 1)),
+    isRecurring: true,
+    weekdays: [1, 3, 5] // Lundi, Mercredi, Vendredi
   },
   {
     id: 'task3',
@@ -104,7 +107,9 @@ export const mockTasks: Task[] = [
     dueDate: formatDate(today),
     completed: false,
     createdBy: 'parent1',
-    createdAt: formatDate(subDays(today, 1))
+    createdAt: formatDate(subDays(today, 1)),
+    isRecurring: true,
+    weekdays: [1, 2, 3, 4, 5] // Du lundi au vendredi
   },
   {
     id: 'task4',
@@ -113,7 +118,9 @@ export const mockTasks: Task[] = [
     dueDate: formatDate(addDays(today, 1)),
     completed: false,
     createdBy: 'parent2',
-    createdAt: formatDate(today)
+    createdAt: formatDate(today),
+    isRecurring: true,
+    weekdays: [6] // Samedi
   }
 ];
 

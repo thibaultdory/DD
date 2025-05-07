@@ -13,7 +13,11 @@ import {
   Chip,
   OutlinedInput,
   SelectChangeEvent,
-  Alert
+  Alert,
+  Switch,
+  FormControlLabel,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -35,6 +39,8 @@ const TaskForm: React.FC = () => {
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState<Date | null>(new Date());
   const [assignedTo, setAssignedTo] = useState<string[]>([]);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [weekdays, setWeekdays] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -55,6 +61,8 @@ const TaskForm: React.FC = () => {
             setDescription(task.description || '');
             setDueDate(new Date(task.dueDate));
             setAssignedTo(task.assignedTo);
+            setIsRecurring(task.isRecurring);
+            setWeekdays(task.weekdays || []);
           } else {
             setError('Tâche non trouvée');
           }
@@ -88,6 +96,11 @@ const TaskForm: React.FC = () => {
       return;
     }
 
+    if (isRecurring && weekdays.length === 0) {
+      setError('Veuillez sélectionner au moins un jour de répétition');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -99,7 +112,9 @@ const TaskForm: React.FC = () => {
           title,
           description,
           dueDate: formattedDueDate,
-          assignedTo
+          assignedTo,
+          isRecurring,
+          weekdays: isRecurring ? weekdays : undefined
         });
         setSuccess('Tâche mise à jour avec succès');
       } else {
@@ -109,7 +124,9 @@ const TaskForm: React.FC = () => {
           dueDate: formattedDueDate,
           assignedTo,
           completed: false,
-          createdBy: authState.currentUser?.id || ''
+          createdBy: authState.currentUser?.id || '',
+          isRecurring,
+          weekdays: isRecurring ? weekdays : undefined
         });
         setSuccess('Tâche créée avec succès');
       }
@@ -210,9 +227,45 @@ const TaskForm: React.FC = () => {
             <FormHelperText>Sélectionnez les enfants à qui assigner cette tâche</FormHelperText>
           </FormControl>
           
+          <FormControlLabel
+            control={
+              <Switch
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+              />
+            }
+            label="Tâche récurrente"
+            sx={{ mt: 2, mb: 1 }}
+          />
+
+          {isRecurring && (
+            <FormControl fullWidth sx={{ mt: 1, mb: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Jours de répétition
+              </Typography>
+              <ToggleButtonGroup
+                value={weekdays}
+                onChange={(e, newWeekdays) => setWeekdays(newWeekdays)}
+                aria-label="jours de la semaine"
+                multiple
+              >
+                <ToggleButton value={1} aria-label="lundi">L</ToggleButton>
+                <ToggleButton value={2} aria-label="mardi">M</ToggleButton>
+                <ToggleButton value={3} aria-label="mercredi">M</ToggleButton>
+                <ToggleButton value={4} aria-label="jeudi">J</ToggleButton>
+                <ToggleButton value={5} aria-label="vendredi">V</ToggleButton>
+                <ToggleButton value={6} aria-label="samedi">S</ToggleButton>
+                <ToggleButton value={7} aria-label="dimanche">D</ToggleButton>
+              </ToggleButtonGroup>
+              <FormHelperText>
+                Sélectionnez les jours où la tâche doit être répétée
+              </FormHelperText>
+            </FormControl>
+          )}
+
           <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={fr}>
             <DatePicker
-              label="Date d'échéance"
+              label={isRecurring ? "Date de début" : "Date d'échéance"}
               value={dueDate}
               onChange={(newValue) => setDueDate(newValue)}
               sx={{ mt: 2, width: '100%' }}
