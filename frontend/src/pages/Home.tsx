@@ -13,6 +13,8 @@ import {
   Divider,
   Tabs,
   Tab,
+  Pagination,
+  Stack,
   Avatar,
   IconButton,
   Tooltip
@@ -74,6 +76,13 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [tabValue, setTabValue] = useState(0);
+  
+  // États pour la pagination
+  const [page, setPage] = useState(1);
+  const [limit] = useState(10);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const [totalPrivileges, setTotalPrivileges] = useState(0);
+  const [totalViolations, setTotalViolations] = useState(0);
 
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
@@ -93,32 +102,35 @@ const Home: React.FC = () => {
           const fetchedRules = await ruleService.getRules();
           setRules(fetchedRules);
 
-          let userTasks: Task[] = [];
-          let userPrivileges: Privilege[] = [];
-          let userViolations: RuleViolation[] = [];
+          let tasksResponse;
+          let privilegesResponse;
+          let violationsResponse;
 
           if (authState.currentUser.isParent) {
             if (selectedChild) {
               // Les parents voient les tâches, privilèges et infractions de l'enfant sélectionné
-              userTasks = await taskService.getUserTasks(selectedChild);
-              userPrivileges = await privilegeService.getUserPrivileges(selectedChild);
-              userViolations = await ruleViolationService.getChildRuleViolations(selectedChild);
+              tasksResponse = await taskService.getUserTasks(selectedChild, page, limit);
+              privilegesResponse = await privilegeService.getUserPrivileges(selectedChild, page, limit);
+              violationsResponse = await ruleViolationService.getChildRuleViolations(selectedChild, page, limit);
             } else {
               // Si aucun enfant n'est sélectionné, afficher toutes les tâches
-              userTasks = await taskService.getTasks();
-              userPrivileges = await privilegeService.getPrivileges();
-              userViolations = await ruleViolationService.getRuleViolations();
+              tasksResponse = await taskService.getTasks(page, limit);
+              privilegesResponse = await privilegeService.getPrivileges(page, limit);
+              violationsResponse = await ruleViolationService.getRuleViolations(page, limit);
             }
           } else {
             // Les enfants ne voient que leurs propres tâches, privilèges et infractions
-            userTasks = await taskService.getUserTasks(authState.currentUser.id);
-            userPrivileges = await privilegeService.getUserPrivileges(authState.currentUser.id);
-            userViolations = await ruleViolationService.getChildRuleViolations(authState.currentUser.id);
+            tasksResponse = await taskService.getUserTasks(authState.currentUser.id, page, limit);
+            privilegesResponse = await privilegeService.getUserPrivileges(authState.currentUser.id, page, limit);
+            violationsResponse = await ruleViolationService.getChildRuleViolations(authState.currentUser.id, page, limit);
           }
 
-          setTasks(userTasks);
-          setPrivileges(userPrivileges);
-          setViolations(userViolations);
+          setTasks(tasksResponse.tasks);
+          setTotalTasks(tasksResponse.total);
+          setPrivileges(privilegesResponse.privileges);
+          setTotalPrivileges(privilegesResponse.total);
+          setViolations(violationsResponse.violations);
+          setTotalViolations(violationsResponse.total);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -133,11 +145,20 @@ const Home: React.FC = () => {
     const unsubscribeTasks = taskService.subscribe(() => {
       if (authState.currentUser) {
         if (authState.currentUser.isParent && selectedChild) {
-          taskService.getUserTasks(selectedChild).then(setTasks);
+          taskService.getUserTasks(selectedChild, page, limit).then(response => {
+            setTasks(response.tasks);
+            setTotalTasks(response.total);
+          });
         } else if (!authState.currentUser.isParent) {
-          taskService.getUserTasks(authState.currentUser.id).then(setTasks);
+          taskService.getUserTasks(authState.currentUser.id, page, limit).then(response => {
+            setTasks(response.tasks);
+            setTotalTasks(response.total);
+          });
         } else {
-          taskService.getTasks().then(setTasks);
+          taskService.getTasks(page, limit).then(response => {
+            setTasks(response.tasks);
+            setTotalTasks(response.total);
+          });
         }
       }
     });
@@ -145,11 +166,20 @@ const Home: React.FC = () => {
     const unsubscribePrivileges = privilegeService.subscribe(() => {
       if (authState.currentUser) {
         if (authState.currentUser.isParent && selectedChild) {
-          privilegeService.getUserPrivileges(selectedChild).then(setPrivileges);
+          privilegeService.getUserPrivileges(selectedChild, page, limit).then(response => {
+            setPrivileges(response.privileges);
+            setTotalPrivileges(response.total);
+          });
         } else if (!authState.currentUser.isParent) {
-          privilegeService.getUserPrivileges(authState.currentUser.id).then(setPrivileges);
+          privilegeService.getUserPrivileges(authState.currentUser.id, page, limit).then(response => {
+            setPrivileges(response.privileges);
+            setTotalPrivileges(response.total);
+          });
         } else {
-          privilegeService.getPrivileges().then(setPrivileges);
+          privilegeService.getPrivileges(page, limit).then(response => {
+            setPrivileges(response.privileges);
+            setTotalPrivileges(response.total);
+          });
         }
       }
     });
@@ -157,11 +187,20 @@ const Home: React.FC = () => {
     const unsubscribeViolations = ruleViolationService.subscribe(() => {
       if (authState.currentUser) {
         if (authState.currentUser.isParent && selectedChild) {
-          ruleViolationService.getChildRuleViolations(selectedChild).then(setViolations);
+          ruleViolationService.getChildRuleViolations(selectedChild, page, limit).then(response => {
+            setViolations(response.violations);
+            setTotalViolations(response.total);
+          });
         } else if (!authState.currentUser.isParent) {
-          ruleViolationService.getChildRuleViolations(authState.currentUser.id).then(setViolations);
+          ruleViolationService.getChildRuleViolations(authState.currentUser.id, page, limit).then(response => {
+            setViolations(response.violations);
+            setTotalViolations(response.total);
+          });
         } else {
-          ruleViolationService.getRuleViolations().then(setViolations);
+          ruleViolationService.getRuleViolations(page, limit).then(response => {
+            setViolations(response.violations);
+            setTotalViolations(response.total);
+          });
         }
       }
     });
@@ -171,7 +210,7 @@ const Home: React.FC = () => {
       unsubscribePrivileges();
       unsubscribeViolations();
     };
-  }, [authState.currentUser, selectedChild]);
+  }, [authState.currentUser, selectedChild, page]);
 
   const handleCompleteTask = async (taskId: string) => {
     try {
@@ -184,6 +223,11 @@ const Home: React.FC = () => {
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+    setPage(1); // Réinitialiser la page lors du changement d'onglet
+  };
+
+  const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
+    setPage(value);
   };
 
   const handleChildSelect = (childId: string) => {
@@ -330,6 +374,16 @@ const Home: React.FC = () => {
               ))}
             </List>
           )}
+          {tasks.length > 0 && (
+            <Stack spacing={2} alignItems="center" sx={{ mt: 2 }}>
+              <Pagination
+                count={Math.ceil(totalTasks / limit)}
+                page={page}
+                onChange={handlePageChange}
+                color="primary"
+              />
+            </Stack>
+          )}
         </Paper>
       </TabPanel>
 
@@ -396,6 +450,16 @@ const Home: React.FC = () => {
               ))}
             </List>
           )}
+          {privileges.length > 0 && (
+            <Stack spacing={2} alignItems="center" sx={{ mt: 2 }}>
+              <Pagination
+                count={Math.ceil(totalPrivileges / limit)}
+                page={page}
+                onChange={handlePageChange}
+                color="primary"
+              />
+            </Stack>
+          )}
         </Paper>
       </TabPanel>
 
@@ -457,6 +521,16 @@ const Home: React.FC = () => {
                 </React.Fragment>
               ))}
             </List>
+          )}
+          {violations.length > 0 && (
+            <Stack spacing={2} alignItems="center" sx={{ mt: 2 }}>
+              <Pagination
+                count={Math.ceil(totalViolations / limit)}
+                page={page}
+                onChange={handlePageChange}
+                color="primary"
+              />
+            </Stack>
           )}
         </Paper>
       </TabPanel>
