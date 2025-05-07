@@ -185,19 +185,26 @@ const Home: React.FC = () => {
 
     // S'abonner aux changements de données
     const unsubscribeTasks = taskService.subscribe(() => {
+      console.log('Task change notification received');
       if (authState.currentUser) {
         if (authState.currentUser.isParent && selectedChild) {
+          console.log('Fetching tasks for selected child:', selectedChild);
           taskService.getUserTasks(selectedChild, page, limit).then(response => {
+            console.log('Updated tasks for child:', response);
             setTasks(response.tasks || []);
             setTotalTasks(response.total || 0);
           });
         } else if (!authState.currentUser.isParent) {
+          console.log('Fetching tasks for current user:', authState.currentUser.id);
           taskService.getUserTasks(authState.currentUser.id, page, limit).then(response => {
+            console.log('Updated tasks for user:', response);
             setTasks(response.tasks || []);
             setTotalTasks(response.total || 0);
           });
         } else {
+          console.log('Fetching all tasks');
           taskService.getTasks(page, limit).then(response => {
+            console.log('Updated all tasks:', response);
             setTasks(response.tasks || []);
             setTotalTasks(response.total || 0);
           });

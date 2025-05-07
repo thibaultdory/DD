@@ -230,7 +230,13 @@ export const taskService = {
     console.log('Sending complete request for task:', taskId);
     const response = await api.put(`/tasks/${taskId}/complete`);
     console.log('Complete task response:', response.data);
-    notifyChange('tasks'); // Ajouter la notification ici aussi
+    
+    // Forcer une mise à jour immédiate des tâches
+    setTimeout(() => {
+      console.log('Notifying task change');
+      notifyChange('tasks');
+    }, 0);
+    
     return response.data;
   },
 
