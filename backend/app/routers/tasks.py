@@ -80,7 +80,13 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
         user = await db.get(User, uid)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {uid} not found")
-        task.assigned_to.append(user)
+        # Insert directly into the association table
+        await db.execute(
+            task_assignments.insert().values(
+                task_id=task.id,
+                user_id=user.id
+            )
+        )
 
     # Si c'est une tâche récurrente, créer toutes les instances
     if task.is_recurring and task.weekdays:
@@ -102,9 +108,16 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
                     parent_task_id=task.id,
                     is_recurring=False  # Les instances ne sont pas récurrentes
                 )
-                # Copier les assignations
-                instance.assigned_to.extend(task.assigned_to)
                 db.add(instance)
+                await db.flush()  # Ensure instance has an ID
+                # Copier les assignations
+                for user_id in task_in.assignedTo:
+                    await db.execute(
+                        task_assignments.insert().values(
+                            task_id=instance.id,
+                            user_id=user_id
+                        )
+                    )
                 next_date += timedelta(days=7)
 
     await db.commit()
@@ -148,12 +161,21 @@ async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends
     if "weekdays" in data:
         task.weekdays = data["weekdays"]
     if "assignedTo" in data:
-        task.assigned_to.clear()
+        # Delete existing assignments
+        await db.execute(
+            task_assignments.delete().where(task_assignments.c.task_id == task.id)
+        )
+        # Add new assignments
         for uid in data["assignedTo"]:
             user = await db.get(User, uid)
             if not user:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {uid} not found")
-            task.assigned_to.append(user)
+            await db.execute(
+                task_assignments.insert().values(
+                    task_id=task.id,
+                    user_id=user.id
+                )
+            )
 
     # Si nécessaire, mettre à jour les instances futures de la tâche récurrente
     if update_future_instances:
@@ -174,8 +196,18 @@ async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends
             if "description" in data:
                 instance.description = data["description"]
             if "assignedTo" in data:
-                instance.assigned_to.clear()
-                instance.assigned_to.extend(task.assigned_to)
+                # Delete existing assignments
+                await db.execute(
+                    task_assignments.delete().where(task_assignments.c.task_id == instance.id)
+                )
+                # Add new assignments
+                for uid in data["assignedTo"]:
+                    await db.execute(
+                        task_assignments.insert().values(
+                            task_id=instance.id,
+                            user_id=uid
+                        )
+                    )
 
     await db.commit()
     await db.refresh(task)
