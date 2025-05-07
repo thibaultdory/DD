@@ -209,7 +209,17 @@ export const taskService = {
     }
     
     const response = await api.put(`/tasks/${taskId}/complete`);
-    return response.data;
+    const updatedTask = response.data;
+    
+    // Update the task in the local state before notifying subscribers
+    const tasks = await this.getTasks();
+    const index = tasks.findIndex(t => t.id === taskId);
+    if (index !== -1) {
+      tasks[index] = updatedTask;
+    }
+    notifyChange('tasks');
+    
+    return updatedTask;
   },
 
   // Supprimer une tâche (parents uniquement)
