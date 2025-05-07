@@ -65,6 +65,7 @@ const TabPanel = (props: TabPanelProps) => {
 
 const Home: React.FC = () => {
   const { authState } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
