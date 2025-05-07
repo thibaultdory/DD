@@ -149,7 +149,14 @@ export const taskService = {
       params: { page, limit }
     });
     console.log('API response for getTasks:', response.data);
-    return response.data;
+    // Adapter la réponse au format attendu
+    const tasks = Array.isArray(response.data) ? response.data : [];
+    const result = {
+      tasks: tasks.slice((page - 1) * limit, page * limit),
+      total: tasks.length
+    };
+    console.log('Adapted getTasks response:', result);
+    return result;
   },
 
   // Récupérer les tâches d'un utilisateur spécifique avec pagination
@@ -169,7 +176,14 @@ export const taskService = {
       params: { page, limit }
     });
     console.log('API response for getUserTasks:', response.data);
-    return response.data;
+    // Adapter la réponse au format attendu
+    const tasks = Array.isArray(response.data) ? response.data : [];
+    const result = {
+      tasks: tasks.slice((page - 1) * limit, page * limit),
+      total: tasks.length
+    };
+    console.log('Adapted getUserTasks response:', result);
+    return result;
   },
 
   // Récupérer les tâches pour une date spécifique
