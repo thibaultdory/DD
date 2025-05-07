@@ -21,6 +21,9 @@ def serialize_task(task: Task):
         "completed": task.completed,
         "createdBy": str(task.created_by),
         "createdAt": task.created_at.isoformat(),
+        "isRecurring": task.is_recurring,
+        "weekdays": task.weekdays if task.weekdays else None,
+        "parentTaskId": str(task.parent_task_id) if task.parent_task_id else None,
     }
 
 @router.get("/tasks")
@@ -54,6 +57,8 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
         description=task_in.description,
         due_date=task_in.dueDate,
         created_by=parent.id,
+        is_recurring=task_in.isRecurring,
+        weekdays=task_in.weekdays if task_in.isRecurring else None,
     )
     db.add(task)
     await db.flush()
@@ -81,6 +86,10 @@ async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends
         task.due_date = data["dueDate"]
     if "completed" in data:
         task.completed = data["completed"]
+    if "isRecurring" in data:
+        task.is_recurring = data["isRecurring"]
+    if "weekdays" in data:
+        task.weekdays = data["weekdays"]
     if "assignedTo" in data:
         task.assigned_to.clear()
         for uid in data["assignedTo"]:

@@ -8,6 +8,8 @@ class TaskCreate(BaseModel):
     description: Optional[str]
     assignedTo: List[UUID]
     dueDate: date
+    isRecurring: bool = False
+    weekdays: Optional[List[int]] = None  # 1-7 pour lundi-dimanche
 
 class TaskUpdate(BaseModel):
     title: Optional[str]
@@ -15,6 +17,8 @@ class TaskUpdate(BaseModel):
     assignedTo: Optional[List[UUID]]
     dueDate: Optional[date]
     completed: Optional[bool]
+    isRecurring: Optional[bool]
+    weekdays: Optional[List[int]]  # 1-7 pour lundi-dimanche
 
 class PrivilegeCreate(BaseModel):
     title: str

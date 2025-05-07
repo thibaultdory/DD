@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.core.initial_data import seed_initial_data
 from app.core.jobs import process_daily_rewards
+from app.scheduler import create_recurring_task_instances
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
@@ -60,9 +61,10 @@ async def startup():
     # Create tables and seed initial data
     await init_db()
     await seed_initial_data()
-    # Schedule daily rewards at midnight
+    # Schedule daily rewards and recurring tasks at midnight
     scheduler = AsyncIOScheduler()
     scheduler.add_job(process_daily_rewards, 'cron', hour=0, minute=0)
+    scheduler.add_job(create_recurring_task_instances, 'cron', hour=0, minute=0)
     scheduler.start()
 
 @app.get("/")
