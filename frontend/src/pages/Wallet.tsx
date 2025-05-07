@@ -33,8 +33,8 @@ import {
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
-import { Wallet, WalletTransaction } from '../types';
-import { walletService } from '../services/api';
+import { Wallet, WalletTransaction, Contract } from '../types';
+import { walletService, contractService } from '../services/api';
 import Layout from '../components/Layout/Layout';
 
 const WalletPage: React.FC = () => {
@@ -47,6 +47,8 @@ const WalletPage: React.FC = () => {
   const [openConvertDialog, setOpenConvertDialog] = useState(false);
   const [convertAmount, setConvertAmount] = useState<number>(0);
   const [convertError, setConvertError] = useState<string | null>(null);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [dailyRewards, setDailyRewards] = useState<{ [contractId: string]: number }>({});
 
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);

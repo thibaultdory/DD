@@ -487,6 +487,65 @@ export const contractService = {
     
     const response = await api.put(`/contracts/${contractId}/deactivate`);
     return response.data;
+  },
+
+  // Calculer la récompense journalière en fonction des règles respectées
+  async calculateDailyReward(contractId: string, date: string): Promise<number> {
+    if (USE_MOCK_DATA) {
+      const contract = mockContracts.find(c => c.id === contractId);
+      if (!contract) {
+        throw new Error('Contract not found');
+      }
+
+      // Récupérer les tâches du jour pour l'enfant
+      const tasks = mockTasks.filter(t => 
+        t.assignedTo.includes(contract.childId) && 
+        t.dueDate === date
+      );
+
+      // Récupérer les violations du jour pour l'enfant
+      const violations = mockRuleViolations.filter(v => 
+        v.childId === contract.childId && 
+        v.date === date
+      );
+
+      // Calculer le nombre de règles respectées
+      let rulesRespected = 0;
+      let totalRules = 0;
+
+      for (const rule of contract.rules) {
+        if (rule.isAllTasksRule) {
+          // Vérifier si toutes les tâches du jour sont complétées
+          const allTasksCompleted = tasks.length > 0 && tasks.every(t => t.completed);
+          if (allTasksCompleted) {
+            rulesRespected++;
+          }
+          totalRules++;
+        } else if (rule.isTask) {
+          // Pour les règles de type tâche, vérifier si la tâche est complétée
+          const taskCompleted = tasks.some(t => t.completed);
+          if (taskCompleted) {
+            rulesRespected++;
+          }
+          totalRules++;
+        } else {
+          // Pour les règles normales, vérifier s'il n'y a pas de violation
+          const hasViolation = violations.some(v => v.ruleId === rule.id);
+          if (!hasViolation) {
+            rulesRespected++;
+          }
+          totalRules++;
+        }
+      }
+
+      // Calculer la récompense proportionnelle au nombre de règles respectées
+      return totalRules > 0 
+        ? (rulesRespected / totalRules) * contract.dailyReward 
+        : contract.dailyReward;
+    }
+    
+    const response = await api.get(`/contracts/${contractId}/daily-reward/${date}`);
+    return response.data;
   }
 };
 

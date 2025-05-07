@@ -13,7 +13,9 @@ import {
   Chip,
   OutlinedInput,
   SelectChangeEvent,
-  Alert
+  Alert,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -35,6 +37,8 @@ const TaskForm: React.FC = () => {
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState<Date | null>(new Date());
   const [assignedTo, setAssignedTo] = useState<string[]>([]);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -55,6 +59,10 @@ const TaskForm: React.FC = () => {
             setDescription(task.description || '');
             setDueDate(new Date(task.dueDate));
             setAssignedTo(task.assignedTo);
+            if (task.recurrence) {
+              setIsRecurring(true);
+              setRecurrenceInterval(task.recurrence.interval || 1);
+            }
           } else {
             setError('Tâche non trouvée');
           }
@@ -94,12 +102,20 @@ const TaskForm: React.FC = () => {
       
       const formattedDueDate = format(dueDate, 'yyyy-MM-dd');
       
+      // Préparer le pattern de récurrence si nécessaire
+      const recurrence = isRecurring ? {
+        type: 'weekly' as const,
+        dayOfWeek: dueDate.getDay(),
+        interval: recurrenceInterval
+      } : undefined;
+      
       if (isEditing && taskId) {
         await taskService.updateTask(taskId, {
           title,
           description,
           dueDate: formattedDueDate,
-          assignedTo
+          assignedTo,
+          recurrence
         });
         setSuccess('Tâche mise à jour avec succès');
       } else {
@@ -109,7 +125,8 @@ const TaskForm: React.FC = () => {
           dueDate: formattedDueDate,
           assignedTo,
           completed: false,
-          createdBy: authState.currentUser?.id || ''
+          createdBy: authState.currentUser?.id || '',
+          recurrence
         });
         setSuccess('Tâche créée avec succès');
       }
@@ -218,6 +235,39 @@ const TaskForm: React.FC = () => {
               sx={{ mt: 2, width: '100%' }}
             />
           </LocalizationProvider>
+
+          <FormControl fullWidth margin="normal">
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isRecurring}
+                  onChange={(e) => setIsRecurring(e.target.checked)}
+                />
+              }
+              label="Tâche récurrente"
+            />
+          </FormControl>
+
+          {isRecurring && (
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="recurrence-interval-label">Répéter toutes les</InputLabel>
+              <Select
+                labelId="recurrence-interval-label"
+                value={recurrenceInterval}
+                onChange={(e) => setRecurrenceInterval(Number(e.target.value))}
+                label="Répéter toutes les"
+              >
+                {[1, 2, 3, 4].map((interval) => (
+                  <MenuItem key={interval} value={interval}>
+                    {interval} {interval === 1 ? 'semaine' : 'semaines'}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                La tâche sera répétée le même jour de la semaine toutes les {recurrenceInterval} semaine{recurrenceInterval > 1 ? 's' : ''}
+              </FormHelperText>
+            </FormControl>
+          )}
           
           <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
             <Button 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, 
   Typography, 
@@ -29,9 +29,27 @@ import {
   EmojiEvents, 
   Warning,
   Info,
-  Check
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  Cancel,
+  Warning
 } from '@mui/icons-material';
-import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
+import { 
+  format, 
+  startOfWeek, 
+  startOfMonth,
+  endOfMonth,
+  addDays, 
+  addWeeks,
+  addMonths,
+  subWeeks,
+  subMonths,
+  eachDayOfInterval,
+  isSameDay, 
+  parseISO 
+} from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, Privilege, RuleViolation, User, Rule } from '../types';
@@ -43,6 +61,193 @@ import {
 } from '../services/api';
 import Layout from '../components/Layout/Layout';
 
+interface CalendarCellProps {
+  day: Date;
+  tasks: Task[];
+  privileges: Privilege[];
+  violations: RuleViolation[];
+  isCurrentMonth?: boolean;
+  viewMode: 'personal' | 'family';
+  calendarView: 'week' | 'month';
+  onCompleteTask: (taskId: string) => void;
+  onItemClick: (item: any, type: 'task' | 'privilege' | 'violation') => void;
+  getUserName: (userId: string) => string;
+}
+
+const CalendarCell: React.FC<CalendarCellProps> = ({
+  day,
+  tasks,
+  privileges,
+  violations,
+  isCurrentMonth = true,
+  viewMode,
+  calendarView,
+  onCompleteTask,
+  onItemClick,
+  getUserName
+}) => {
+  const isToday = isSameDay(day, new Date());
+  const height = calendarView === 'week' ? '200px' : '150px';
+
+  return (
+    <TableCell 
+      align="center"
+      sx={{
+        height,
+        verticalAlign: 'top',
+        backgroundColor: isToday 
+          ? 'action.hover' 
+          : isCurrentMonth 
+            ? 'inherit'
+            : 'action.disabledBackground',
+        opacity: isCurrentMonth ? 1 : 0.5,
+        p: 1
+      }}
+    >
+      <Typography 
+        variant="body2" 
+        sx={{ 
+          mb: 1,
+          fontWeight: isCurrentMonth ? 'bold' : 'normal'
+        }}
+      >
+        {calendarView === 'week' 
+          ? format(day, 'd MMMM', { locale: fr })
+          : format(day, 'd', { locale: fr })
+        }
+      </Typography>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        {tasks.map(task => (
+          <Box 
+            key={task.id} 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              p: 0.5,
+              borderRadius: 1,
+              bgcolor: task.completed ? 'success.light' : 'error.light',
+              opacity: task.completed ? 0.7 : 1,
+              fontSize: calendarView === 'month' ? '0.75rem' : '0.875rem'
+            }}
+          >
+            {task.completed ? (
+              <CheckCircle fontSize="small" color="success" sx={{ mr: 0.5 }} />
+            ) : (
+              <Cancel fontSize="small" color="error" sx={{ mr: 0.5 }} />
+            )}
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                flexGrow: 1,
+                textDecoration: task.completed ? 'line-through' : 'none',
+                fontSize: 'inherit'
+              }}
+              noWrap
+            >
+              {task.title}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {viewMode === 'family' && calendarView === 'week' && (
+                <Chip 
+                  label={getUserName(task.assignedTo[0])} 
+                  size="small" 
+                  sx={{ mr: 0.5, height: 20 }}
+                />
+              )}
+              <IconButton 
+                size="small" 
+                onClick={() => onItemClick(task, 'task')}
+              >
+                <Info fontSize="small" />
+              </IconButton>
+              {!task.completed && (
+                <IconButton 
+                  size="small" 
+                  onClick={() => onCompleteTask(task.id)}
+                >
+                  <Check fontSize="small" />
+                </IconButton>
+              )}
+            </Box>
+          </Box>
+        ))}
+
+        {privileges.map(privilege => (
+          <Box 
+            key={privilege.id} 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              p: 0.5,
+              borderRadius: 1,
+              bgcolor: privilege.earned ? 'success.light' : 'warning.light',
+              fontSize: calendarView === 'month' ? '0.75rem' : '0.875rem'
+            }}
+          >
+            <Typography 
+              variant="body2" 
+              sx={{ flexGrow: 1, fontSize: 'inherit' }}
+              noWrap
+            >
+              {privilege.title}
+            </Typography>
+            {viewMode === 'family' && calendarView === 'week' && (
+              <Chip 
+                label={getUserName(privilege.assignedTo)} 
+                size="small" 
+                sx={{ mr: 0.5, height: 20 }}
+              />
+            )}
+            <IconButton 
+              size="small" 
+              onClick={() => onItemClick(privilege, 'privilege')}
+            >
+              <Info fontSize="small" />
+            </IconButton>
+          </Box>
+        ))}
+
+        {violations.map(violation => (
+          <Box 
+            key={violation.id} 
+            sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              p: 0.5,
+              borderRadius: 1,
+              bgcolor: 'warning.light',
+              fontSize: calendarView === 'month' ? '0.75rem' : '0.875rem'
+            }}
+          >
+            <Warning fontSize="small" sx={{ mr: 0.5 }} />
+            <Typography 
+              variant="body2" 
+              sx={{ flexGrow: 1, fontSize: 'inherit' }}
+              noWrap
+            >
+              {violation.description || 'Infraction'}
+            </Typography>
+            {viewMode === 'family' && calendarView === 'week' && (
+              <Chip 
+                label={getUserName(violation.childId)} 
+                size="small" 
+                sx={{ mr: 0.5, height: 20 }}
+              />
+            )}
+            <IconButton 
+              size="small" 
+              onClick={() => onItemClick(violation, 'violation')}
+            >
+              <Info fontSize="small" />
+            </IconButton>
+          </Box>
+        ))}
+      </Box>
+    </TableCell>
+  );
+};
+
 const Calendar: React.FC = () => {
   const { authState } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -51,6 +256,7 @@ const Calendar: React.FC = () => {
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
+  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -60,9 +266,36 @@ const Calendar: React.FC = () => {
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
 
-  // Générer les jours de la semaine
-  const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekDays = [...Array(7)].map((_, i) => addDays(startOfCurrentWeek, i));
+  // Fonction pour naviguer entre les périodes
+  const handlePeriodChange = (direction: 'prev' | 'next') => {
+    if (calendarView === 'week') {
+      setSelectedDate(direction === 'next' 
+        ? addWeeks(selectedDate, 1)
+        : subWeeks(selectedDate, 1)
+      );
+    } else {
+      setSelectedDate(direction === 'next'
+        ? addMonths(selectedDate, 1)
+        : subMonths(selectedDate, 1)
+      );
+    }
+  };
+
+  // Générer les jours à afficher selon la vue
+  const getDaysToDisplay = () => {
+    if (calendarView === 'week') {
+      const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
+      return [...Array(7)].map((_, i) => addDays(startOfCurrentWeek, i));
+    } else {
+      const monthStart = startOfMonth(selectedDate);
+      const monthEnd = endOfMonth(selectedDate);
+      const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
+      const endDate = startOfWeek(monthEnd, { weekStartsOn: 1 });
+      return eachDayOfInterval({ start: startDate, end: addDays(endDate, 6) });
+    }
+  };
+
+  const daysToDisplay = getDaysToDisplay();
 
   useEffect(() => {
     // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
@@ -233,19 +466,47 @@ const Calendar: React.FC = () => {
         </Typography>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={handleViewModeChange}
-            aria-label="Mode d'affichage"
-          >
-            <ToggleButton value="personal" aria-label="Vue personnelle">
-              Vue personnelle
-            </ToggleButton>
-            <ToggleButton value="family" aria-label="Vue familiale">
-              Vue familiale
-            </ToggleButton>
-          </ToggleButtonGroup>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={handleViewModeChange}
+              aria-label="Mode d'affichage"
+            >
+              <ToggleButton value="personal" aria-label="Vue personnelle">
+                Vue personnelle
+              </ToggleButton>
+              <ToggleButton value="family" aria-label="Vue familiale">
+                Vue familiale
+              </ToggleButton>
+            </ToggleButtonGroup>
+
+            <ToggleButtonGroup
+              value={calendarView}
+              exclusive
+              onChange={(_, newView) => newView && setCalendarView(newView)}
+              aria-label="Vue calendrier"
+            >
+              <ToggleButton value="week" aria-label="Vue semaine">
+                Semaine
+              </ToggleButton>
+              <ToggleButton value="month" aria-label="Vue mois">
+                Mois
+              </ToggleButton>
+            </ToggleButtonGroup>
+
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <IconButton onClick={() => handlePeriodChange('prev')}>
+                <ChevronLeft />
+              </IconButton>
+              <Button onClick={() => setSelectedDate(new Date())}>
+                Aujourd'hui
+              </Button>
+              <IconButton onClick={() => handlePeriodChange('next')}>
+                <ChevronRight />
+              </IconButton>
+            </Box>
+          </Box>
         </Box>
       </Box>
 
@@ -280,105 +541,56 @@ const Calendar: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              {weekDays.map((day) => (
-                <TableCell key={day.toString()} align="center">
+              {[...Array(7)].map((_, index) => (
+                <TableCell key={index} align="center">
                   <Typography variant="subtitle1">
-                    {format(day, 'EEEE', { locale: fr })}
-                  </Typography>
-                  <Typography variant="body2">
-                    {format(day, 'd MMMM', { locale: fr })}
+                    {format(addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), index), 'EEEE', { locale: fr })}
                   </Typography>
                 </TableCell>
               ))}
             </TableRow>
           </TableHead>
           <TableBody>
-            <TableRow>
-              {weekDays.map((day) => {
-                const dayTasks = getTasksForDay(day);
-                const dayPrivileges = getPrivilegesForDay(day);
-                const dayViolations = getViolationsForDay(day);
-                
-                return (
-                  <TableCell key={day.toString()} sx={{ height: '200px', verticalAlign: 'top' }}>
-                    <Box sx={{ minHeight: '100%', p: 1 }}>
-                      {/* Tâches */}
-                      {dayTasks.length > 0 && (
-                        <Box sx={{ mb: 2 }}>
-                          <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Assignment fontSize="small" sx={{ mr: 0.5 }} />
-                            Tâches
-                          </Typography>
-                          {dayTasks.map(task => (
-                            <Box 
-                              key={task.id} 
-                              sx={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                mb: 0.5,
-                                p: 0.5,
-                                borderRadius: 1,
-                                bgcolor: task.completed ? 'success.light' : 'error.light',
-                                opacity: task.completed ? 0.7 : 1
-                              }}
-                            >
-                              {task.completed ? (
-                                <CheckCircle fontSize="small" color="success" sx={{ mr: 0.5 }} />
-                              ) : (
-                                <Cancel fontSize="small" color="error" sx={{ mr: 0.5 }} />
-                              )}
-                              <Typography 
-                                variant="body2" 
-                                sx={{ 
-                                  flexGrow: 1,
-                                  textDecoration: task.completed ? 'line-through' : 'none'
-                                }}
-                              >
-                                {task.title}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                {viewMode === 'family' && (
-                                  <Chip 
-                                    label={getUserName(task.assignedTo[0])} 
-                                    size="small" 
-                                    sx={{ mr: 0.5 }}
-                                  />
-                                )}
-                                <Tooltip title="Voir détails">
-                                  <IconButton 
-                                    size="small" 
-                                    onClick={() => handleItemClick(task, 'task')}
-                                  >
-                                    <Info fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                {!task.completed && (
-                                  <Tooltip title="Marquer comme terminé">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={() => handleCompleteTask(task.id)}
-                                    >
-                                      <Check fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                )}
-                              </Box>
-                            </Box>
-                          ))}
-                        </Box>
-                      )}
-
-                      {/* Privilèges */}
-                      {dayPrivileges.length > 0 && (
-                        <Box sx={{ mb: 2 }}>
-                          <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <EmojiEvents fontSize="small" sx={{ mr: 0.5 }} />
-                            Privilèges
-                          </Typography>
-                          {dayPrivileges.map(privilege => (
-                            <Box 
-                              key={privilege.id} 
-                              sx={{ 
+            {calendarView === 'week' ? (
+              // Vue semaine
+              <TableRow>
+                {daysToDisplay.map((day) => (
+                  <CalendarCell
+                    key={day.toString()}
+                    day={day}
+                    tasks={getTasksForDay(day)}
+                    privileges={getPrivilegesForDay(day)}
+                    violations={getViolationsForDay(day)}
+                    viewMode={viewMode}
+                    calendarView={calendarView}
+                    onCompleteTask={handleCompleteTask}
+                    onItemClick={handleItemClick}
+                    getUserName={getUserName}
+                  />
+                ))}
+              </TableRow>
+            ) : (
+              // Vue mois
+              Array.from({ length: Math.ceil(daysToDisplay.length / 7) }).map((_, weekIndex) => (
+                <TableRow key={weekIndex}>
+                  {daysToDisplay.slice(weekIndex * 7, (weekIndex + 1) * 7).map((day) => (
+                    <CalendarCell
+                      key={day.toString()}
+                      day={day}
+                      tasks={getTasksForDay(day)}
+                      privileges={getPrivilegesForDay(day)}
+                      violations={getViolationsForDay(day)}
+                      isCurrentMonth={day.getMonth() === selectedDate.getMonth()}
+                      viewMode={viewMode}
+                      calendarView={calendarView}
+                      onCompleteTask={handleCompleteTask}
+                      onItemClick={handleItemClick}
+                      getUserName={getUserName}
+                    />
+                  ))}
+                </TableRow>
+              ))
+            )}
                                 display: 'flex', 
                                 alignItems: 'center', 
                                 mb: 0.5,

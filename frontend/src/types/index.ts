@@ -7,6 +7,13 @@ export interface User {
   profilePicture?: string;
 }
 
+// Types pour la récurrence des tâches
+export interface RecurrencePattern {
+  type: 'weekly';
+  dayOfWeek: number; // 0-6 pour dimanche-samedi
+  interval?: number; // Par défaut 1, pour "toutes les X semaines"
+}
+
 // Types pour les tâches
 export interface Task {
   id: string;
@@ -17,6 +24,7 @@ export interface Task {
   completed: boolean;
   createdBy: string; // ID du parent qui a créé la tâche
   createdAt: string;
+  recurrence?: RecurrencePattern;
 }
 
 // Types pour les privilèges
@@ -44,6 +52,7 @@ export interface Rule {
   id: string;
   description: string;
   isTask: boolean; // Si true, c'est une tâche qui doit être complétée
+  isAllTasksRule?: boolean; // Si true, c'est la règle "Toutes les tâches du jour sont réalisées"
 }
 
 export interface Contract {

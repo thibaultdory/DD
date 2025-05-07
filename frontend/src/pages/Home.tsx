@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Typography, 
   Grid, 
@@ -261,7 +262,12 @@ const Home: React.FC = () => {
                 : 'Mes tâches'}
             </Typography>
             {authState.currentUser?.isParent && (
-              <Button variant="outlined" size="small" href="/tasks/new">
+              <Button 
+                variant="outlined" 
+                size="small" 
+                component={Link} 
+                to="/tasks/new"
+              >
                 Ajouter
               </Button>
             )}
@@ -338,7 +344,12 @@ const Home: React.FC = () => {
                 : 'Mes privilèges'}
             </Typography>
             {authState.currentUser?.isParent && (
-              <Button variant="outlined" size="small" href="/privileges/new">
+              <Button 
+                variant="outlined" 
+                size="small" 
+                component={Link} 
+                to="/privileges/new"
+              >
                 Ajouter
               </Button>
             )}
@@ -400,7 +411,12 @@ const Home: React.FC = () => {
                 : 'Mes infractions'}
             </Typography>
             {authState.currentUser?.isParent && (
-              <Button variant="outlined" size="small" href="/violations/new">
+              <Button 
+                variant="outlined" 
+                size="small" 
+                component={Link} 
+                to="/violations/new"
+              >
                 Ajouter
               </Button>
             )}

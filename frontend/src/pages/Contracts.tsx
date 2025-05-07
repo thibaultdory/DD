@@ -385,6 +385,9 @@ const Contracts: React.FC = () => {
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth margin="normal" required>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Sélectionnez l'enfant concerné par ce contrat
+                  </Typography>
                   <InputLabel id="child-label">Enfant</InputLabel>
                   <Select
                     labelId="child-label"
@@ -393,6 +396,7 @@ const Contracts: React.FC = () => {
                     value={formData.childId}
                     label="Enfant"
                     onChange={handleSelectChange}
+                    sx={{ minHeight: 56 }}
                   >
                     {getChildren().map(child => (
                       <MenuItem key={child.id} value={child.id}>
@@ -468,15 +472,42 @@ const Contracts: React.FC = () => {
               </Grid>
             </Grid>
             
-            <Box sx={{ mt: 3, mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="subtitle1">Règles du contrat</Typography>
-              <Button 
-                variant="outlined" 
-                startIcon={<Add />}
-                onClick={handleOpenRulesDialog}
-              >
-                Ajouter une règle
-              </Button>
+            <Box sx={{ mt: 3, mb: 1 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="subtitle1">Règles du contrat</Typography>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<CheckCircle />}
+                    onClick={() => {
+                      const rule: Rule = {
+                        id: `rule${Date.now()}`,
+                        description: 'Toutes les tâches du jour sont réalisées',
+                        isTask: false,
+                        isAllTasksRule: true
+                      };
+                      setFormData({
+                        ...formData,
+                        rules: [...(formData.rules || []), rule]
+                      });
+                    }}
+                    disabled={formData.rules?.some(r => r.isAllTasksRule)}
+                  >
+                    Règle "Toutes les tâches"
+                  </Button>
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<Add />}
+                    onClick={handleOpenRulesDialog}
+                  >
+                    Ajouter une règle
+                  </Button>
+                </Box>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Vous pouvez ajouter des règles spécifiques ou utiliser la règle "Toutes les tâches" qui vérifie que toutes les tâches du jour ont été réalisées.
+              </Typography>
             </Box>
             
             {formData.rules && formData.rules.length > 0 ? (
@@ -493,7 +524,13 @@ const Contracts: React.FC = () => {
                       >
                         <ListItemText
                           primary={rule.description}
-                          secondary={rule.isTask ? 'Tâche à accomplir' : 'Règle à respecter'}
+                          secondary={
+                            rule.isAllTasksRule
+                              ? 'Règle spéciale : Toutes les tâches du jour doivent être réalisées'
+                              : rule.isTask
+                                ? 'Tâche à accomplir'
+                                : 'Règle à respecter'
+                          }
                         />
                       </ListItem>
                       {index < formData.rules.length - 1 && <Divider />}
