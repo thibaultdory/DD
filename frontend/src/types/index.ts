@@ -17,6 +17,9 @@ export interface Task {
   completed: boolean;
   createdBy: string; // ID du parent qui a créé la tâche
   createdAt: string;
+  isRecurring: boolean;
+  weekdays?: number[]; // 1-7 pour lundi-dimanche
+  parentTaskId?: string; // ID de la tâche parente si c'est une instance d'une tâche récurrente
 }
 
 // Types pour les privilèges

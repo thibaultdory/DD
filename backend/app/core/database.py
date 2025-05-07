@@ -1,16 +1,44 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import text
 from app.core.config import settings
 from app.models import Base
+import asyncio
+from sqlalchemy.exc import OperationalError
 
 engine = create_async_engine(settings.database_url, echo=False)
 AsyncSessionLocal = sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False
 )
 
+async def wait_for_db():
+    """Wait for database to be ready."""
+    max_retries = 30  # Plus de tentatives
+    retry_delay = 1   # Délai plus court
+
+    for attempt in range(max_retries):
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+                print(f"Database is ready (attempt {attempt + 1})")
+                return
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"Database not ready (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay} seconds... Error: {str(e)}")
+                await asyncio.sleep(retry_delay)
+            else:
+                print("Failed to connect to database after all retries")
+                raise
+
 async def init_db():
+    """Initialize database schema."""
+    # D'abord, on attend que la base soit prête
+    await wait_for_db()
+    
+    # Ensuite, on crée les tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    print("Database schema created successfully")
 
 async def get_db():
     async with AsyncSessionLocal() as session:
