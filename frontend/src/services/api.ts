@@ -148,6 +148,7 @@ export const taskService = {
     const response = await api.get('/tasks', {
       params: { page, limit }
     });
+    console.log('API response for getTasks:', response.data);
     return response.data;
   },
 
@@ -167,6 +168,7 @@ export const taskService = {
     const response = await api.get(`/tasks/user/${userId}`, {
       params: { page, limit }
     });
+    console.log('API response for getUserTasks:', response.data);
     return response.data;
   },
 
@@ -225,7 +227,10 @@ export const taskService = {
       throw new Error('Task not found');
     }
     
+    console.log('Sending complete request for task:', taskId);
     const response = await api.put(`/tasks/${taskId}/complete`);
+    console.log('Complete task response:', response.data);
+    notifyChange('tasks'); // Ajouter la notification ici aussi
     return response.data;
   },
 

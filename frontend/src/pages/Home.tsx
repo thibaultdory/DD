@@ -97,6 +97,13 @@ const Home: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        console.log('Fetching data with:', {
+          isParent: authState.currentUser?.isParent,
+          selectedChild,
+          page,
+          limit
+        });
+        
         if (authState.currentUser) {
           // Récupérer les règles (communes à tous)
           const fetchedRules = await ruleService.getRules();
@@ -151,6 +158,15 @@ const Home: React.FC = () => {
 
           console.log('Setting tasks:', tasksData);
           console.log('Setting total tasks:', tasksTotal);
+          console.log('Setting state with:', {
+            tasksData,
+            tasksTotal,
+            privilegesData,
+            privilegesTotal,
+            violationsData,
+            violationsTotal
+          });
+          
           setTasks(tasksData);
           setTotalTasks(tasksTotal);
           setPrivileges(privilegesData);
@@ -240,7 +256,9 @@ const Home: React.FC = () => {
 
   const handleCompleteTask = async (taskId: string) => {
     try {
-      await taskService.completeTask(taskId);
+      console.log('Completing task:', taskId);
+      const updatedTask = await taskService.completeTask(taskId);
+      console.log('Task completed:', updatedTask);
       // La mise à jour des tâches sera gérée par l'abonnement
     } catch (error) {
       console.error('Error completing task:', error);
