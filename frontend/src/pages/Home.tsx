@@ -26,6 +26,7 @@ import {
   Person,
   Check
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, Privilege, RuleViolation, User, Rule } from '../types';
 import { 
@@ -65,6 +66,7 @@ const TabPanel = (props: TabPanelProps) => {
 
 const Home: React.FC = () => {
   const { authState } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
@@ -261,7 +263,11 @@ const Home: React.FC = () => {
                 : 'Mes tâches'}
             </Typography>
             {authState.currentUser?.isParent && (
-              <Button variant="outlined" size="small" href="/tasks/new">
+              <Button 
+                variant="outlined" 
+                size="small" 
+                onClick={() => navigate('/tasks/new')}
+              >
                 Ajouter
               </Button>
             )}
@@ -338,7 +344,11 @@ const Home: React.FC = () => {
                 : 'Mes privilèges'}
             </Typography>
             {authState.currentUser?.isParent && (
-              <Button variant="outlined" size="small" href="/privileges/new">
+              <Button 
+                variant="outlined" 
+                size="small" 
+                onClick={() => navigate('/privileges/new')}
+              >
                 Ajouter
               </Button>
             )}
@@ -400,7 +410,11 @@ const Home: React.FC = () => {
                 : 'Mes infractions'}
             </Typography>
             {authState.currentUser?.isParent && (
-              <Button variant="outlined" size="small" href="/violations/new">
+              <Button 
+                variant="outlined" 
+                size="small" 
+                onClick={() => navigate('/violations/new')}
+              >
                 Ajouter
               </Button>
             )}
