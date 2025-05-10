@@ -2,12 +2,19 @@ from pydantic import BaseSettings, AnyUrl
 
 
 class Settings(BaseSettings):
+    # Database settings
     database_url: AnyUrl
+
+    # OAuth settings
     google_client_id: str
     google_client_secret: str
+    
+    # Security settings
     secret_key: str
-    base_url: AnyUrl
-    frontend_url: str = "http://localhost:54287"  # Default to local dev frontend
+    
+    # URL settings
+    base_url: str  # Backend URL
+    frontend_url: str  # Frontend URL
 
     class Config:
         env_file = ".env"
