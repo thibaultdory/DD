@@ -202,8 +202,9 @@ This guide assumes you have:
        ServerAdmin webmaster@dd-api.ethzero.club
 
        SSLEngine on
-       SSLCertificateFile /etc/letsencrypt/live/dd-api.ethzero.club/fullchain.pem
-       SSLCertificateKeyFile /etc/letsencrypt/live/dd-api.ethzero.club/privkey.pem
+       # Note: Both domains use the same certificate files from the primary domain
+       SSLCertificateFile /etc/letsencrypt/live/dd.ethzero.club/fullchain.pem
+       SSLCertificateKeyFile /etc/letsencrypt/live/dd.ethzero.club/privkey.pem
 
        ProxyPreserveHost On
        ProxyPass / http://localhost:56000/
@@ -218,6 +219,8 @@ This guide assumes you have:
        CustomLog ${APACHE_LOG_DIR}/dd-backend-access.log combined
    </VirtualHost>
    ```
+
+   Note: When using certbot with multiple domains in a single certificate request, all certificates are stored under the first domain's directory (`dd.ethzero.club` in this case). That's why both virtual hosts use the same certificate files.
 
    Enable the virtual hosts:
    ```bash
