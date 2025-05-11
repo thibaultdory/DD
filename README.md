@@ -232,13 +232,52 @@ This guide assumes you have:
 
 5. **Deploy the application**:
    ```bash
+   # Create and edit the environment file
+   cp .env.example .env
+   nano .env
+   ```
+
+   Add these values to `.env`:
+   ```env
+   # Domains
+   FRONTEND_DOMAIN=dd.ethzero.club
+   BACKEND_DOMAIN=dd-api.ethzero.club
+   FRONTEND_URL=https://dd.ethzero.club
+   BACKEND_URL=https://dd-api.ethzero.club
+
+   # Ports (must match the ones in Apache configuration)
+   FRONTEND_PORT=54287
+   BACKEND_PORT=56000
+   VITE_API_BASE_URL=https://dd-api.ethzero.club/api
+
+   # Database
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
+   DB_NAME=dd_db
+   DATABASE_URL=postgresql+asyncpg://your_db_user:your_db_password@db:5432/dd_db
+
+   # Authentication
+   GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   SECRET_KEY=your_random_secret_key
+   ```
+
+   Build and start the services:
+   ```bash
    # Build and start services
    docker compose -f docker-compose.prod.yml build
    docker compose -f docker-compose.prod.yml up -d
 
    # Verify services are running
    docker compose -f docker-compose.prod.yml ps
+   docker compose -f docker-compose.prod.yml logs
+
+   # Test the services directly
+   curl http://localhost:54287
+   curl http://localhost:56000/api/health
    ```
+
+   Note: The application services (frontend and backend) are exposed only to localhost. Apache2 acts as a reverse proxy, handling SSL termination and forwarding requests to these local ports.
 
 6. **Set up automatic backups**:
    ```bash
