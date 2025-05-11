@@ -85,67 +85,170 @@ The services will be accessible at:
 - Domain names configured (dd.ethzero.club and dd-api.ethzero.club)
 - SSL certificates (Let's Encrypt recommended)
 
-### Initial Server Setup
+### Production Setup with Existing Nginx
 
-1. Update system and install requirements:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install -y docker.io docker-compose nginx certbot python3-certbot-nginx
-   ```
+This guide assumes you have:
+- A Debian-like system (Ubuntu, Debian, etc.)
+- Nginx already installed and running
+- Docker and Docker Compose installed
+- Root access or sudo privileges
 
-2. Create required directories:
+1. **Set up SSL certificates**:
    ```bash
-   mkdir -p /path/to/app/{nginx/conf.d,nginx/ssl,nginx/logs,static,backups}
-   ```
+   # Stop Nginx temporarily
+   sudo systemctl stop nginx
 
-3. Set up SSL certificates:
-   ```bash
+   # Get SSL certificates
    sudo certbot certonly --standalone -d dd.ethzero.club -d dd-api.ethzero.club
-   sudo cp -r /etc/letsencrypt/live/* /path/to/app/nginx/ssl/
+
+   # Start Nginx back
+   sudo systemctl start nginx
    ```
 
-### Deployment Process
-
-1. Clone and configure:
+2. **Create application directory**:
    ```bash
-   git clone https://github.com/yourusername/DD.git /path/to/app
-   cd /path/to/app
-   cp .env.example .env
+   # Create app directory
+   sudo mkdir -p /opt/dd
+   sudo chown $USER:$USER /opt/dd
+   cd /opt/dd
+
+   # Create backup directory
+   sudo mkdir -p /opt/dd/backups
    ```
 
-2. Edit `.env` for production:
+3. **Clone and configure the application**:
+   ```bash
+   # Clone repository
+   git clone https://github.com/yourusername/DD.git .
+
+   # Copy and edit environment file
+   cp .env.example .env
+   nano .env  # Edit with your production values
+   ```
+
+   Edit `.env` with these values:
    ```env
    FRONTEND_DOMAIN=dd.ethzero.club
    BACKEND_DOMAIN=dd-api.ethzero.club
    FRONTEND_URL=https://dd.ethzero.club
    BACKEND_URL=https://dd-api.ethzero.club
+   GOOGLE_CLIENT_ID=your_client_id
+   GOOGLE_CLIENT_SECRET=your_client_secret
+   SECRET_KEY=your_random_secret
    ```
 
-3. Deploy the application:
+4. **Configure Nginx**:
    ```bash
+   # Create Nginx configuration
+   sudo nano /etc/nginx/sites-available/dd
+   ```
+
+   Add this configuration:
+   ```nginx
+   # Frontend
+   server {
+       listen 80;
+       server_name dd.ethzero.club;
+       return 301 https://$server_name$request_uri;
+   }
+
+   server {
+       listen 443 ssl;
+       server_name dd.ethzero.club;
+
+       ssl_certificate /etc/letsencrypt/live/dd.ethzero.club/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/dd.ethzero.club/privkey.pem;
+
+       location / {
+           proxy_pass http://localhost:54287;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+       }
+   }
+
+   # Backend
+   server {
+       listen 80;
+       server_name dd-api.ethzero.club;
+       return 301 https://$server_name$request_uri;
+   }
+
+   server {
+       listen 443 ssl;
+       server_name dd-api.ethzero.club;
+
+       ssl_certificate /etc/letsencrypt/live/dd-api.ethzero.club/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/dd-api.ethzero.club/privkey.pem;
+
+       location / {
+           proxy_pass http://localhost:56000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+       }
+   }
+   ```
+
+   Enable the configuration:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/dd /etc/nginx/sites-enabled/
+   sudo nginx -t  # Test configuration
+   sudo systemctl reload nginx
+   ```
+
+5. **Deploy the application**:
+   ```bash
+   # Build and start services
    docker compose -f docker-compose.prod.yml build
    docker compose -f docker-compose.prod.yml up -d
+
+   # Verify services are running
+   docker compose -f docker-compose.prod.yml ps
    ```
 
-4. Set up automatic backups:
+6. **Set up automatic backups**:
    ```bash
+   # Make backup script executable
    chmod +x scripts/backup.sh
-   (crontab -l 2>/dev/null; echo "0 2 * * * /path/to/app/scripts/backup.sh") | crontab -
+
+   # Add to crontab (runs at 2 AM daily)
+   (crontab -l 2>/dev/null; echo "0 2 * * * /opt/dd/scripts/backup.sh") | crontab -
    ```
 
-### Security Hardening
-
-1. Set proper permissions:
+7. **Set up log rotation**:
    ```bash
-   sudo chown -R root:root /path/to/app/nginx
-   sudo chmod -R 600 /path/to/app/nginx/ssl
+   sudo nano /etc/logrotate.d/dd
    ```
 
-2. Configure firewall:
+   Add this configuration:
+   ```
+   /opt/dd/backups/*.log {
+       daily
+       rotate 7
+       compress
+       delaycompress
+       missingok
+       notifempty
+       create 640 root root
+   }
+   ```
+
+8. **Verify the setup**:
    ```bash
-   sudo ufw allow 80/tcp
-   sudo ufw allow 443/tcp
-   sudo ufw enable
+   # Check application logs
+   docker compose -f docker-compose.prod.yml logs
+
+   # Test SSL certificates
+   curl -vI https://dd.ethzero.club
+   curl -vI https://dd-api.ethzero.club
+
+   # Check backup directory permissions
+   ls -la /opt/dd/backups
    ```
 
 ### Maintenance
