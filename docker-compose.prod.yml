@@ -1,31 +1,6 @@
 version: '3.8'
 
 services:
-  nginx:
-    image: nginx:alpine
-    restart: always
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/ssl:/etc/nginx/ssl
-      - ./nginx/logs:/var/log/nginx
-      - ./static:/var/www/static
-      - certbot_data:/etc/letsencrypt
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - frontend
-      - backend
-
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - certbot_data:/etc/letsencrypt
-      - ./static:/var/www/static
-    command: renew
-    depends_on:
-      - nginx
-
   db:
     image: postgres:15-alpine
     restart: always
@@ -86,4 +61,3 @@ services:
 
 volumes:
   db_data:
-  certbot_data:
