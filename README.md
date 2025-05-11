@@ -85,27 +85,40 @@ The services will be accessible at:
 - Domain names configured (dd.ethzero.club and dd-api.ethzero.club)
 - SSL certificates (Let's Encrypt recommended)
 
-### Production Setup with Existing Nginx
+### Production Setup with Existing Apache2
 
 This guide assumes you have:
 - A Debian-like system (Ubuntu, Debian, etc.)
-- Nginx already installed and running
+- Apache2 already installed and running
 - Docker and Docker Compose installed
 - Root access or sudo privileges
 
-1. **Set up SSL certificates**:
+1. **Enable required Apache modules**:
    ```bash
-   # Stop Nginx temporarily
-   sudo systemctl stop nginx
+   # Enable required modules
+   sudo a2enmod proxy
+   sudo a2enmod proxy_http
+   sudo a2enmod proxy_wstunnel
+   sudo a2enmod ssl
+   sudo a2enmod rewrite
+
+   # Restart Apache to apply changes
+   sudo systemctl restart apache2
+   ```
+
+2. **Set up SSL certificates**:
+   ```bash
+   # Stop Apache temporarily
+   sudo systemctl stop apache2
 
    # Get SSL certificates
    sudo certbot certonly --standalone -d dd.ethzero.club -d dd-api.ethzero.club
 
-   # Start Nginx back
-   sudo systemctl start nginx
+   # Start Apache back
+   sudo systemctl start apache2
    ```
 
-2. **Create application directory**:
+3. **Create application directory**:
    ```bash
    # Create app directory
    sudo mkdir -p /opt/dd
@@ -116,7 +129,7 @@ This guide assumes you have:
    sudo mkdir -p /opt/dd/backups
    ```
 
-3. **Clone and configure the application**:
+4. **Clone and configure the application**:
    ```bash
    # Clone repository
    git clone https://github.com/yourusername/DD.git .
@@ -137,68 +150,81 @@ This guide assumes you have:
    SECRET_KEY=your_random_secret
    ```
 
-4. **Configure Nginx**:
+5. **Configure Apache Virtual Hosts**:
    ```bash
-   # Create Nginx configuration
-   sudo nano /etc/nginx/sites-available/dd
+   # Create virtual host configurations
+   sudo nano /etc/apache2/sites-available/dd-frontend.conf
    ```
 
-   Add this configuration:
-   ```nginx
-   # Frontend
-   server {
-       listen 80;
-       server_name dd.ethzero.club;
-       return 301 https://$server_name$request_uri;
-   }
+   Add this configuration for the frontend:
+   ```apache
+   <VirtualHost *:80>
+       ServerName dd.ethzero.club
+       Redirect permanent / https://dd.ethzero.club/
+   </VirtualHost>
 
-   server {
-       listen 443 ssl;
-       server_name dd.ethzero.club;
+   <VirtualHost *:443>
+       ServerName dd.ethzero.club
+       ServerAdmin webmaster@dd.ethzero.club
 
-       ssl_certificate /etc/letsencrypt/live/dd.ethzero.club/fullchain.pem;
-       ssl_certificate_key /etc/letsencrypt/live/dd.ethzero.club/privkey.pem;
+       SSLEngine on
+       SSLCertificateFile /etc/letsencrypt/live/dd.ethzero.club/fullchain.pem
+       SSLCertificateKeyFile /etc/letsencrypt/live/dd.ethzero.club/privkey.pem
 
-       location / {
-           proxy_pass http://localhost:54287;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
-       }
-   }
+       ProxyPreserveHost On
+       ProxyPass / http://localhost:54287/
+       ProxyPassReverse / http://localhost:54287/
 
-   # Backend
-   server {
-       listen 80;
-       server_name dd-api.ethzero.club;
-       return 301 https://$server_name$request_uri;
-   }
+       # WebSocket support
+       RewriteEngine On
+       RewriteCond %{HTTP:Upgrade} =websocket [NC]
+       RewriteRule /(.*) ws://localhost:54287/$1 [P,L]
 
-   server {
-       listen 443 ssl;
-       server_name dd-api.ethzero.club;
-
-       ssl_certificate /etc/letsencrypt/live/dd-api.ethzero.club/fullchain.pem;
-       ssl_certificate_key /etc/letsencrypt/live/dd-api.ethzero.club/privkey.pem;
-
-       location / {
-           proxy_pass http://localhost:56000;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
-       }
-   }
+       ErrorLog ${APACHE_LOG_DIR}/dd-frontend-error.log
+       CustomLog ${APACHE_LOG_DIR}/dd-frontend-access.log combined
+   </VirtualHost>
    ```
 
-   Enable the configuration:
+   Create backend configuration:
    ```bash
-   sudo ln -s /etc/nginx/sites-available/dd /etc/nginx/sites-enabled/
-   sudo nginx -t  # Test configuration
-   sudo systemctl reload nginx
+   sudo nano /etc/apache2/sites-available/dd-backend.conf
+   ```
+
+   Add this configuration for the backend:
+   ```apache
+   <VirtualHost *:80>
+       ServerName dd-api.ethzero.club
+       Redirect permanent / https://dd-api.ethzero.club/
+   </VirtualHost>
+
+   <VirtualHost *:443>
+       ServerName dd-api.ethzero.club
+       ServerAdmin webmaster@dd-api.ethzero.club
+
+       SSLEngine on
+       SSLCertificateFile /etc/letsencrypt/live/dd-api.ethzero.club/fullchain.pem
+       SSLCertificateKeyFile /etc/letsencrypt/live/dd-api.ethzero.club/privkey.pem
+
+       ProxyPreserveHost On
+       ProxyPass / http://localhost:56000/
+       ProxyPassReverse / http://localhost:56000/
+
+       # WebSocket support
+       RewriteEngine On
+       RewriteCond %{HTTP:Upgrade} =websocket [NC]
+       RewriteRule /(.*) ws://localhost:56000/$1 [P,L]
+
+       ErrorLog ${APACHE_LOG_DIR}/dd-backend-error.log
+       CustomLog ${APACHE_LOG_DIR}/dd-backend-access.log combined
+   </VirtualHost>
+   ```
+
+   Enable the virtual hosts:
+   ```bash
+   sudo a2ensite dd-frontend
+   sudo a2ensite dd-backend
+   sudo apache2ctl configtest
+   sudo systemctl reload apache2
    ```
 
 5. **Deploy the application**:
