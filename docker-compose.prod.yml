@@ -51,6 +51,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
     restart: always
     env_file:
       - ./.env
