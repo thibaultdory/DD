@@ -69,7 +69,9 @@ Ce contrat prendra fin le 1er Juillet 2025.
    VITE_API_BASE_URL=http://localhost:56000/api
    ```
    
-   > **Important**: The `VITE_API_BASE_URL` variable must be set correctly for the frontend to connect to the backend API. This variable is used during the build process.
+   > **Important**: 
+   > - The `VITE_API_BASE_URL` variable must be set correctly for the frontend to connect to the backend API. This variable is used during the build process.
+   > - The `FRONTEND_URL` must match the URL that you use to access the frontend in your browser, as it's used for CORS configuration in the backend.
 
 4. Start the development environment:
    ```bash
@@ -269,6 +271,8 @@ This guide assumes you have:
    ```
    
    > **Note**: The `VITE_API_BASE_URL` environment variable is critical for the frontend to correctly connect to the backend API. This variable is used during the build process and cannot be changed after the frontend is built without rebuilding the container.
+   >
+   > **Important**: The `FRONTEND_URL` environment variable is used by the backend for CORS configuration. It must exactly match the URL that users will use to access the frontend, including the protocol (http/https).
 
    Build and start the services:
    ```bash
