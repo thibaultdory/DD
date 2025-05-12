@@ -11,8 +11,12 @@ RUN npm install
 # Copy application code
 COPY . .
 
+# Add build arguments for environment variables
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+
 # Expose port for dev server
-EXPOSE 54287
+EXPOSE ${FRONTEND_PORT}
 
 # Start development server
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "54287"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "${FRONTEND_PORT}"]
