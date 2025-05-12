@@ -81,9 +81,9 @@ def get_next_weekday(start_date: date, target_weekday: int) -> date:
     
     # If the target weekday is earlier in the week or the same day,
     # move to the next week
-    if days_ahead <= 0:
+    if days_ahead < 0:
         days_ahead += 7
-        
+    
     # Calculate and return the next date
     next_date = start_date + timedelta(days=days_ahead)
     print(f"Next occurrence of weekday {target_weekday} from {start_date} is {next_date}")
@@ -156,14 +156,20 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
             print(f"Processing weekday {weekday} ({['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][weekday]})")
             
             # Commencer à la première occurrence après la date de début
-            next_date = get_next_weekday(task_in.dueDate, weekday)
-            print(f"First occurrence of weekday {weekday} is on {next_date}")
+            # If the due date is already the target weekday, use it as the first occurrence
+            if task_in.dueDate.isoweekday() == weekday:
+                next_date = task_in.dueDate
+                print(f"Due date {task_in.dueDate} is already weekday {weekday}, using it as first occurrence")
+            else:
+                next_date = get_next_weekday(task_in.dueDate, weekday)
+                print(f"First occurrence of weekday {weekday} is on {next_date}")
             
             # Créer une instance pour chaque semaine jusqu'à end_date
             instance_count = 0
             current_date = next_date
             
             while current_date <= end_date:
+                # Create the instance
                 instance = Task(
                     title=task.title,
                     description=task.description,
@@ -175,6 +181,7 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
                 )
                 db.add(instance)
                 await db.flush()  # Ensure instance has an ID
+                print(f"Created instance with ID: {instance.id} for date: {current_date} (weekday {weekday})")
                 
                 # Copier les assignations
                 for user_id in task_in.assignedTo:
@@ -184,17 +191,42 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
                             user_id=user_id
                         )
                     )
+                    print(f"Assigned user {user_id} to instance {instance.id}")
                 
                 instance_count += 1
                 total_instances += 1
                 
                 # Move to the next week
                 current_date += timedelta(days=7)
-                print(f"Created instance for {current_date - timedelta(days=7)} (weekday {weekday})")
             
             print(f"Created {instance_count} instances for weekday {weekday}")
         
         print(f"Total recurring instances created: {total_instances}")
+        
+        # Verify instances in database
+        print("Verifying created instances in database...")
+        result = await db.execute(
+            select(Task).where(Task.parent_task_id == task.id)
+        )
+        instances = result.scalars().all()
+        print(f"Found {len(instances)} instances in database for parent task {task.id}")
+        
+        # Group instances by weekday
+        weekday_counts = {}
+        for instance in instances:
+            instance_weekday = instance.due_date.isoweekday()
+            if instance_weekday not in weekday_counts:
+                weekday_counts[instance_weekday] = 0
+            weekday_counts[instance_weekday] += 1
+        
+        print(f"Instances by weekday: {weekday_counts}")
+        
+        # Check if all weekdays have instances
+        for weekday in valid_weekdays:
+            if weekday not in weekday_counts:
+                print(f"WARNING: No instances found for weekday {weekday}")
+            else:
+                print(f"Found {weekday_counts[weekday]} instances for weekday {weekday}")
 
     await db.commit()
     await db.refresh(task)
