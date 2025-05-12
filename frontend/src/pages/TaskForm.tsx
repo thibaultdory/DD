@@ -266,7 +266,7 @@ const TaskForm: React.FC = () => {
                   console.log('Selected weekdays:', newWeekdays);
                   // Map weekday numbers to day names for better logging
                   const dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-                  const selectedDays = newWeekdays.map(day => `${day} (${dayNames[day]})`);
+                  const selectedDays = newWeekdays.map((day: number) => `${day} (${dayNames[day]})`);
                   console.log('Selected days:', selectedDays.join(', '));
                   setWeekdays(newWeekdays);
                 }}
