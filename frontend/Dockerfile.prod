@@ -31,6 +31,3 @@ EXPOSE ${FRONTEND_PORT}
 
 # Use the script as entrypoint
 ENTRYPOINT ["/app/generate-config.sh"]
-
-# Start serve
-CMD ["serve", "-s", "dist", "-l", "${FRONTEND_PORT}", "--no-clipboard"]
