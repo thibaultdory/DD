@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends, HTTPException, status
+import logging  # Import logging
 from starlette.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,7 @@ from app.models.user import User
 from sqlalchemy import select
 
 router = APIRouter()
+logger = logging.getLogger(__name__)  # Add logger instance
 
 oauth = OAuth()
 oauth.register(
@@ -37,11 +39,13 @@ async def auth_callback(request: Request, db: AsyncSession = Depends(get_db)):
         except Exception:
             # Fallback to userinfo endpoint if id_token parsing fails
             user_info = await oauth.google.userinfo(token=token)
-    except OAuthError:
+    except OAuthError as e:  # Catch exception as e
+        logger.error(f"OAuth authentication failed: {e}", exc_info=True)  # Log error
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth authentication failed")
 
     email = user_info.get("email")
     if not email:
+        logger.error("No email in OAuth token from Google.") # Log error
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No email in token")
     name = user_info.get("name", email)
     picture = user_info.get("picture")
@@ -52,6 +56,7 @@ async def auth_callback(request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).filter_by(email=email))
     user = result.scalars().first()
     if not user:
+        logger.info(f"Creating new user with email: {email}") # Log info
         user = User(
             email=email,
             name=name,
@@ -78,9 +83,11 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
     try:
         uid = UUID(user_id)
     except ValueError:
+        logger.warning(f"Invalid user_id format in session: {user_id}") # Log warning
         return None
     user = await db.get(User, uid)
     if not user:
+        logger.warning(f"User with id {uid} not found in database, but was in session.") # Log warning
         return None
     return {
         "id": str(user.id),
