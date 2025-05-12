@@ -72,9 +72,11 @@ async def root():
     return {"message": "Assistant de Vie Familiale API is running"}
 
 if __name__ == "__main__":
+    import os
+    port = int(os.getenv("BACKEND_PORT", "56000"))
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=59430,
+        port=port,
         reload=True,
     )
