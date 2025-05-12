@@ -1,0 +1,25 @@
+# Single stage build for production
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install serve for static file serving
+RUN npm install -g serve
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci
+
+# Copy source files
+COPY . .
+
+# Build with environment variables
+ARG VITE_API_BASE_URL
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+RUN npm run build
+
+# Expose the port that serve will use
+EXPOSE ${FRONTEND_PORT}
+
+# Start serve
+CMD ["sh", "-c", "serve -s dist -l ${FRONTEND_PORT} --no-clipboard"]

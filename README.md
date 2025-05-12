@@ -40,388 +40,322 @@ Elea recevra 1€ chaque jour ou elle remplira les conditions suivantes :
 
 Ce contrat prendra fin le 1er Juillet 2025.
 
-## Installation et configuration
-
-### Prerequis
-
-- Node.js (v14 ou superieur)
-- npm (v6 ou superieur)
-
-### Installation
-
-1. Clonez le depot :
-   ```bash
-   git clone https://github.com/votre-utilisateur/DD.git
-   cd frontend
-   ```
-
-2. Installez les dependances :
-   ```bash
-   npm install
-   ```
-
-### Lancement de l'application
-
-Pour demarrer l'application en mode developpement :
-
-```bash
-npm run dev
-```
-
-L'application sera accessible a l'adresse [http://localhost:5173](http://localhost:5173).
-
-Pour construire l'application pour la production :
-
-```bash
-npm run build
-```
-
-## Configuration
-
-L'application utilise un mode "mock data" par defaut pour faciliter le developpement et les tests sans avoir besoin d'un backend fonctionnel. Ce mode peut etre active/desactive dans le fichier `src/services/api.ts` en modifiant la constante `USE_MOCK_DATA`.
-
-L'authentification est realisee via OAuth avec des comptes Google.
-
-## Specification de l'API Backend
-
-L'application frontend communique avec un backend via les endpoints suivants :
-
-### Authentification
-
-#### `GET /api/auth/google`
-- **Description** : Initie l'authentification OAuth avec Google
-- **Reponse** : Redirige vers Google pour l'authentification, puis renvoie les informations de l'utilisateur connecte
-- **Format de reponse** : `User`
-
-#### `GET /api/auth/me`
-- **Description** : Recupere les informations de l'utilisateur actuellement connecte
-- **Reponse** : Informations de l'utilisateur ou null si non connecte
-- **Format de reponse** : `User | null`
-
-#### `POST /api/auth/logout`
-- **Description** : Deconnecte l'utilisateur actuel
-- **Reponse** : Statut de succes
-
-### Utilisateurs
-
-#### `GET /api/users/family`
-- **Description** : Recupere tous les membres de la famille de l'utilisateur connecte
-- **Reponse** : Liste des utilisateurs de la famille
-- **Format de reponse** : `User[]`
-
-### Taches
-
-#### `GET /api/tasks`
-- **Description** : Recupere toutes les taches (accessible uniquement aux parents)
-- **Reponse** : Liste de toutes les taches
-- **Format de reponse** : `Task[]`
-
-#### `GET /api/tasks/user/:userId`
-- **Description** : Recupere les taches assignees a un utilisateur specifique
-- **Parametres** : `userId` - ID de l'utilisateur
-- **Reponse** : Liste des taches assignees a l'utilisateur
-- **Format de reponse** : `Task[]`
-
-#### `GET /api/tasks/date/:date`
-- **Description** : Recupere les taches pour une date specifique
-- **Parametres** : `date` - Date au format YYYY-MM-DD
-- **Reponse** : Liste des taches pour cette date
-- **Format de reponse** : `Task[]`
-
-#### `POST /api/tasks`
-- **Description** : Cree une nouvelle tache (accessible uniquement aux parents)
-- **Corps de la requete** : Donnees de la tache sans ID ni date de creation
-- **Format du corps** : `Omit<Task, 'id' | 'createdAt'>`
-- **Reponse** : Tache creee avec ID et date de creation
-- **Format de reponse** : `Task`
-
-#### `PUT /api/tasks/:taskId`
-- **Description** : Met a jour une tache existante
-- **Parametres** : `taskId` - ID de la tache
-- **Corps de la requete** : Donnees partielles de la tache a mettre a jour
-- **Format du corps** : `Partial<Task>`
-- **Reponse** : Tache mise a jour
-- **Format de reponse** : `Task`
-
-#### `PUT /api/tasks/:taskId/complete`
-- **Description** : Marque une tache comme terminee
-- **Parametres** : `taskId` - ID de la tache
-- **Reponse** : Tache mise a jour
-- **Format de reponse** : `Task`
-
-#### `DELETE /api/tasks/:taskId`
-- **Description** : Supprime une tache (accessible uniquement aux parents)
-- **Parametres** : `taskId` - ID de la tache
-- **Reponse** : Statut de succes
-
-### Privileges
-
-#### `GET /api/privileges`
-- **Description** : Recupere tous les privileges (accessible uniquement aux parents)
-- **Reponse** : Liste de tous les privileges
-- **Format de reponse** : `Privilege[]`
-
-#### `GET /api/privileges/user/:userId`
-- **Description** : Recupere les privileges d'un utilisateur specifique
-- **Parametres** : `userId` - ID de l'utilisateur
-- **Reponse** : Liste des privileges de l'utilisateur
-- **Format de reponse** : `Privilege[]`
-
-#### `GET /api/privileges/date/:date`
-- **Description** : Recupere les privileges pour une date specifique
-- **Parametres** : `date` - Date au format YYYY-MM-DD
-- **Reponse** : Liste des privileges pour cette date
-- **Format de reponse** : `Privilege[]`
-
-#### `POST /api/privileges`
-- **Description** : Cree un nouveau privilege (accessible uniquement aux parents)
-- **Corps de la requete** : Donnees du privilege sans ID
-- **Format du corps** : `Omit<Privilege, 'id'>`
-- **Reponse** : Privilege cree avec ID
-- **Format de reponse** : `Privilege`
-
-#### `PUT /api/privileges/:privilegeId`
-- **Description** : Met a jour un privilege existant (accessible uniquement aux parents)
-- **Parametres** : `privilegeId` - ID du privilege
-- **Corps de la requete** : Donnees partielles du privilege a mettre a jour
-- **Format du corps** : `Partial<Privilege>`
-- **Reponse** : Privilege mis a jour
-- **Format de reponse** : `Privilege`
-
-#### `DELETE /api/privileges/:privilegeId`
-- **Description** : Supprime un privilege (accessible uniquement aux parents)
-- **Parametres** : `privilegeId` - ID du privilege
-- **Reponse** : Statut de succes
-
-### Infractions aux regles
-
-#### `GET /api/rule-violations`
-- **Description** : Recupere toutes les infractions aux regles (accessible uniquement aux parents)
-- **Reponse** : Liste de toutes les infractions
-- **Format de reponse** : `RuleViolation[]`
-
-#### `GET /api/rule-violations/child/:childId`
-- **Description** : Recupere les infractions aux regles d'un enfant specifique
-- **Parametres** : `childId` - ID de l'enfant
-- **Reponse** : Liste des infractions de l'enfant
-- **Format de reponse** : `RuleViolation[]`
-
-#### `GET /api/rule-violations/date/:date`
-- **Description** : Recupere les infractions aux regles pour une date specifique
-- **Parametres** : `date` - Date au format YYYY-MM-DD
-- **Reponse** : Liste des infractions pour cette date
-- **Format de reponse** : `RuleViolation[]`
-
-#### `POST /api/rule-violations`
-- **Description** : Cree une nouvelle infraction (accessible uniquement aux parents)
-- **Corps de la requete** : Donnees de l'infraction sans ID
-- **Format du corps** : `Omit<RuleViolation, 'id'>`
-- **Reponse** : Infraction creee avec ID
-- **Format de reponse** : `RuleViolation`
-
-#### `DELETE /api/rule-violations/:violationId`
-- **Description** : Supprime une infraction (accessible uniquement aux parents)
-- **Parametres** : `violationId` - ID de l'infraction
-- **Reponse** : Statut de succes
-
-### Contrats
-
-#### `GET /api/contracts`
-- **Description** : Recupere tous les contrats (accessible uniquement aux parents)
-- **Reponse** : Liste de tous les contrats
-- **Format de reponse** : `Contract[]`
-
-#### `GET /api/contracts/:contractId`
-- **Description** : Recupere un contrat specifique
-- **Parametres** : `contractId` - ID du contrat
-- **Reponse** : Details du contrat
-- **Format de reponse** : `Contract`
-
-#### `GET /api/contracts/child/:childId`
-- **Description** : Recupere les contrats d'un enfant specifique
-- **Parametres** : `childId` - ID de l'enfant
-- **Reponse** : Liste des contrats de l'enfant
-- **Format de reponse** : `Contract[]`
-
-#### `POST /api/contracts`
-- **Description** : Cree un nouveau contrat (accessible uniquement aux parents)
-- **Corps de la requete** : Donnees du contrat sans ID
-- **Format du corps** : `Omit<Contract, 'id'>`
-- **Reponse** : Contrat cree avec ID
-- **Format de reponse** : `Contract`
-
-#### `PUT /api/contracts/:contractId`
-- **Description** : Met a jour un contrat existant (accessible uniquement aux parents)
-- **Parametres** : `contractId` - ID du contrat
-- **Corps de la requete** : Donnees partielles du contrat a mettre a jour
-- **Format du corps** : `Partial<Contract>`
-- **Reponse** : Contrat mis a jour
-- **Format de reponse** : `Contract`
-
-#### `PUT /api/contracts/:contractId/deactivate`
-- **Description** : Desactive un contrat (accessible uniquement aux parents)
-- **Parametres** : `contractId` - ID du contrat
-- **Reponse** : Contrat mis a jour
-- **Format de reponse** : `Contract`
-
-### Portefeuilles
-
-#### `GET /api/wallets/:childId`
-- **Description** : Recupere le portefeuille d'un enfant
-- **Parametres** : `childId` - ID de l'enfant
-- **Reponse** : Details du portefeuille
-- **Format de reponse** : `Wallet`
-
-#### `GET /api/wallets/:childId/transactions`
-- **Description** : Recupere les transactions du portefeuille d'un enfant
-- **Parametres** : `childId` - ID de l'enfant
-- **Reponse** : Liste des transactions
-- **Format de reponse** : `WalletTransaction[]`
-
-#### `POST /api/wallets/:childId/convert`
-- **Description** : Convertit des euros virtuels en euros reels (accessible uniquement aux parents)
-- **Parametres** : `childId` - ID de l'enfant
-- **Corps de la requete** : Montant a convertir
-- **Format du corps** : `{ amount: number }`
-- **Reponse** : Portefeuille mis a jour
-- **Format de reponse** : `Wallet`
-
-## Traitement automatique des contrats
-
-Le backend doit implementer un traitement automatique qui s'execute chaque jour a minuit pour :
-
-1. Verifier pour chaque contrat actif si toutes les conditions sont remplies :
-   - Toutes les taches assignees a l'enfant pour la journee sont marquees comme terminees
-   - Aucune infraction aux regles du contrat n'a ete enregistree pour la journee
-
-2. Si toutes les conditions sont remplies, ajouter automatiquement le montant de la recompense journaliere au portefeuille de l'enfant
-
-3. Creer une transaction dans l'historique du portefeuille avec la raison "Recompense journaliere" et une reference au contrat
-
-## Types de donnees
-
-Les principaux types de donnees utilises par l'API sont definis dans le fichier `src/types/index.ts` du frontend.
-
-## Securite
-
-L'API doit implementer les mesures de securite suivantes :
-
-1. Authentification via OAuth avec Google
-2. Verification des roles (parent/enfant) pour les operations restreintes
-3. Validation des donnees entrantes
-4. Protection CSRF
-5. Rate limiting pour prevenir les abus
-
-## Backend
-
-The backend is built with FastAPI and PostgreSQL, and implements all the API endpoints described above.
-
-### Prerequisites
-
-- Python 3.12+
-- PostgreSQL server
-
-### Setup
-
-1. cd backend
-2. Copy `.env.example` to `.env` and set your environment variables:
-   - `DATABASE_URL` (e.g. `postgresql+asyncpg://user:pass@localhost:5432/dd_db`)
-   - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
-   - `SECRET_KEY` (random secret for sessions & CSRF)
-   - `BASE_URL` (e.g. `http://localhost:59430`)
-3. Create the database:
-   ```bash
-   psql -c "CREATE DATABASE dd_db;"
-   ```
-4. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-5. Run the server:
-   ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 59430
-   ```
-
-On first startup, the server will automatically create tables and seed initial users:
-- Parents: `dory.thibault@gmail.com`, `laurie.delmer@gmail.com`
-- Kids: `eleadorydelmer@gmail.com`, `joleendorydelmer@gmail.com`
-
-The API is then available at `http://localhost:59430/api`.
-
-## Docker
+## Development Setup
 
 ### Prerequisites
 
 - Docker
 - Docker Compose
 
-### Setup
+### Local Development Setup
 
-1. Copy environment variables for the backend:
-
+1. Clone the repository:
    ```bash
-   cp backend/.env.example backend/.env
-   # Edit backend/.env to set your Google OAuth credentials and SECRET_KEY
+   git clone https://github.com/yourusername/DD.git
+   cd DD
    ```
-2. (Optional) Edit `docker-compose.yml` to adjust environment variables under the `backend` service, for example:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `SECRET_KEY`
-3. Build and start all services:
 
+2. Copy the example environment file:
    ```bash
-   docker-compose up --build
+   cp .env.example .env
+   ```
+
+3. Edit `.env` for local development:
+   ```env
+   FRONTEND_DOMAIN=localhost
+   BACKEND_DOMAIN=localhost
+   FRONTEND_URL=http://localhost:54287
+   BACKEND_URL=http://localhost:56000
+   VITE_API_BASE_URL=http://localhost:56000/api
+   ```
+   
+   > **Important**: 
+   > - The `VITE_API_BASE_URL` variable must be set correctly for the frontend to connect to the backend API. This variable is used during the build process.
+   > - The `FRONTEND_URL` must match the URL that you use to access the frontend in your browser, as it's used for CORS configuration in the backend.
+
+4. Start the development environment:
+   ```bash
+   docker compose up --build
    ```
 
 The services will be accessible at:
-
 - Frontend: http://localhost:54287
 - Backend API: http://localhost:56000/api
 
-To stop the services:
+## Production Deployment
 
-```bash
-docker-compose down
-```
+### Prerequisites
 
+- Linux server with Docker and Docker Compose installed
+- Domain names configured (dd.ethzero.club and dd-api.ethzero.club)
+- SSL certificates (Let's Encrypt recommended)
 
-## Database Setup with Docker
+### Production Setup with Existing Apache2
 
-Here is how to set up your PostgreSQL database when using Docker Compose:
+This guide assumes you have:
+- A Debian-like system (Ubuntu, Debian, etc.)
+- Apache2 already installed and running
+- Docker and Docker Compose installed
+- Root access or sudo privileges
 
-1. Make sure your Docker containers are started:
+1. **Enable required Apache modules**:
+   ```bash
+   # Enable required modules
+   sudo a2enmod proxy
+   sudo a2enmod proxy_http
+   sudo a2enmod proxy_wstunnel
+   sudo a2enmod ssl
+   sudo a2enmod rewrite
+
+   # Restart Apache to apply changes
+   sudo systemctl restart apache2
    ```
-   docker compose up -d
+
+2. **Set up SSL certificates**:
+   ```bash
+   # Stop Apache temporarily
+   sudo systemctl stop apache2
+
+   # Get SSL certificates
+   sudo certbot certonly --standalone -d dd.ethzero.club -d dd-api.ethzero.club
+
+   # Start Apache back
+   sudo systemctl start apache2
+   ```
+
+3. **Create application directory**:
+   ```bash
+   # Create app directory
+   sudo mkdir -p /opt/dd
+   sudo chown $USER:$USER /opt/dd
+   cd /opt/dd
+
+   # Create backup directory
+   sudo mkdir -p /opt/dd/backups
+   ```
+
+4. **Clone and configure the application**:
+   ```bash
+   # Clone repository
+   git clone https://github.com/yourusername/DD.git .
+
+   # Copy and edit environment file
+   cp .env.example .env
+   nano .env  # Edit with your production values
+   ```
+
+   Edit `.env` with these values:
+   ```env
+   FRONTEND_DOMAIN=dd.ethzero.club
+   BACKEND_DOMAIN=dd-api.ethzero.club
+   FRONTEND_URL=https://dd.ethzero.club
+   BACKEND_URL=https://dd-api.ethzero.club
+   GOOGLE_CLIENT_ID=your_client_id
+   GOOGLE_CLIENT_SECRET=your_client_secret
+   SECRET_KEY=your_random_secret
+   ```
+
+5. **Configure Apache Virtual Hosts**:
+   ```bash
+   # Create virtual host configurations
+   sudo nano /etc/apache2/sites-available/dd-frontend.conf
+   ```
+
+   Add this configuration for the frontend:
+   ```apache
+   <VirtualHost *:80>
+       ServerName dd.ethzero.club
+       Redirect permanent / https://dd.ethzero.club/
+   </VirtualHost>
+
+   <VirtualHost *:443>
+       ServerName dd.ethzero.club
+       ServerAdmin webmaster@dd.ethzero.club
+
+       SSLEngine on
+       SSLCertificateFile /etc/letsencrypt/live/dd.ethzero.club/fullchain.pem
+       SSLCertificateKeyFile /etc/letsencrypt/live/dd.ethzero.club/privkey.pem
+
+       ProxyPreserveHost On
+       ProxyPass / http://localhost:54287/
+       ProxyPassReverse / http://localhost:54287/
+
+       # WebSocket support
+       RewriteEngine On
+       RewriteCond %{HTTP:Upgrade} =websocket [NC]
+       RewriteRule /(.*) ws://localhost:54287/$1 [P,L]
+
+       ErrorLog ${APACHE_LOG_DIR}/dd-frontend-error.log
+       CustomLog ${APACHE_LOG_DIR}/dd-frontend-access.log combined
+   </VirtualHost>
+   ```
+
+   Create backend configuration:
+   ```bash
+   sudo nano /etc/apache2/sites-available/dd-backend.conf
+   ```
+
+   Add this configuration for the backend:
+   ```apache
+   <VirtualHost *:80>
+       ServerName dd-api.ethzero.club
+       Redirect permanent / https://dd-api.ethzero.club/
+   </VirtualHost>
+
+   <VirtualHost *:443>
+       ServerName dd-api.ethzero.club
+       ServerAdmin webmaster@dd-api.ethzero.club
+
+       SSLEngine on
+       # Note: Both domains use the same certificate files from the primary domain
+       SSLCertificateFile /etc/letsencrypt/live/dd.ethzero.club/fullchain.pem
+       SSLCertificateKeyFile /etc/letsencrypt/live/dd.ethzero.club/privkey.pem
+
+       ProxyPreserveHost On
+       ProxyPass / http://localhost:56000/
+       ProxyPassReverse / http://localhost:56000/
+
+       # WebSocket support
+       RewriteEngine On
+       RewriteCond %{HTTP:Upgrade} =websocket [NC]
+       RewriteRule /(.*) ws://localhost:56000/$1 [P,L]
+
+       ErrorLog ${APACHE_LOG_DIR}/dd-backend-error.log
+       CustomLog ${APACHE_LOG_DIR}/dd-backend-access.log combined
+   </VirtualHost>
+   ```
+
+   Note: When using certbot with multiple domains in a single certificate request, all certificates are stored under the first domain's directory (`dd.ethzero.club` in this case). That's why both virtual hosts use the same certificate files.
+
+   Enable the virtual hosts:
+   ```bash
+   sudo a2ensite dd-frontend
+   sudo a2ensite dd-backend
+   sudo apache2ctl configtest
+   sudo systemctl reload apache2
+   ```
+
+5. **Deploy the application**:
+   ```bash
+   # Create and edit the environment file
+   cp .env.example .env
+   nano .env
+   ```
+
+   Add these values to `.env`:
+   ```env
+   # Domains
+   FRONTEND_DOMAIN=dd.ethzero.club
+   BACKEND_DOMAIN=dd-api.ethzero.club
+   FRONTEND_URL=https://dd.ethzero.club
+   BACKEND_URL=https://dd-api.ethzero.club
+
+   # Ports (must match the ones in Apache configuration)
+   FRONTEND_PORT=54287
+   BACKEND_PORT=56000
+   
+   # IMPORTANT: This variable is used during the frontend build process
+   # It must match your backend URL with the /api path
+   VITE_API_BASE_URL=https://dd-api.ethzero.club/api
+
+   # Database
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
+   DB_NAME=dd_db
+   DATABASE_URL=postgresql+asyncpg://your_db_user:your_db_password@db:5432/dd_db
+
+   # Authentication
+   GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   SECRET_KEY=your_random_secret_key
    ```
    
-2. Connect to the PostgreSQL container:
-   ```
-   docker compose exec db psql -U user -d dd_db
-   ```
-   This uses the default credentials from the `docker-compose.yml`, where `POSTGRES_USER` is `user` and the database name (`POSTGRES_DB`) is `dd_db`.
+   > **Note**: The `VITE_API_BASE_URL` environment variable is critical for the frontend to correctly connect to the backend API. This variable is used during the build process and cannot be changed after the frontend is built without rebuilding the container.
+   >
+   > **Important**: The `FRONTEND_URL` environment variable is used by the backend for CORS configuration. It must exactly match the URL that users will use to access the frontend, including the protocol (http/https).
 
-3. (Optional) Create a custom user if desired:
-   ```
-   CREATE USER dd WITH PASSWORD '12345';
-   ```
-   If you want to keep the default user, skip this step.
+   Build and start the services:
+   ```bash
+   # Build and start services
+   docker compose -f docker-compose.prod.yml build
+   docker compose -f docker-compose.prod.yml up -d
 
-4. Grant privileges to the new user (or any user different from the owner):
-   ```
-   GRANT ALL PRIVILEGES ON DATABASE dd_db TO dd;
-   GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO dd;
-   GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO dd;
-   ```
-   This ensures the user can read/write data on existing tables.
+   # Verify services are running
+   docker compose -f docker-compose.prod.yml ps
+   docker compose -f docker-compose.prod.yml logs
 
-5. Update your backend configuration to use these credentials. For example, in `backend/.env`:
-   ```
-   DATABASE_URL=postgresql+asyncpg://dd:12345@db:5432/dd_db
+   # Test the services directly
+   curl http://localhost:54287
+   curl http://localhost:56000/api/health
    ```
 
-Now, when you run or rebuild the Docker services:
-```
-docker compose down
-docker compose up --build -d
-```
-the backend container should connect to the Postgres container with the granted privileges.
+   Note: The application services (frontend and backend) are exposed only to localhost. Apache2 acts as a reverse proxy, handling SSL termination and forwarding requests to these local ports.
+
+6. **Set up automatic backups**:
+   ```bash
+   # Make backup script executable
+   chmod +x scripts/backup.sh
+
+   # Add to crontab (runs at 2 AM daily)
+   (crontab -l 2>/dev/null; echo "0 2 * * * /opt/dd/scripts/backup.sh") | crontab -
+   ```
+
+7. **Set up log rotation**:
+   ```bash
+   sudo nano /etc/logrotate.d/dd
+   ```
+
+   Add this configuration:
+   ```
+   /opt/dd/backups/*.log {
+       daily
+       rotate 7
+       compress
+       delaycompress
+       missingok
+       notifempty
+       create 640 root root
+   }
+   ```
+
+8. **Verify the setup**:
+   ```bash
+   # Check application logs
+   docker compose -f docker-compose.prod.yml logs
+
+   # Test SSL certificates
+   curl -vI https://dd.ethzero.club
+   curl -vI https://dd-api.ethzero.club
+
+   # Check backup directory permissions
+   ls -la /opt/dd/backups
+   ```
+
+### Maintenance
+
+1. Updates:
+   ```bash
+   git pull
+   docker compose -f docker-compose.prod.yml build
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+
+2. Logs:
+   ```bash
+   docker compose -f docker-compose.prod.yml logs -f
+   ```
+
+3. Backup verification:
+   ```bash
+   ls -l /path/to/app/backups
+   ```
+
+## Documentation
+
+- [API Documentation](docs/API.md)
+- [Frontend Documentation](docs/Frontend.md)
+- [Backend Documentation](docs/Backend.md)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

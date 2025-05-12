@@ -3,20 +3,27 @@ version: '3.8'
 services:
   db:
     image: postgres:15-alpine
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
       - db_data:/var/lib/postgresql/data
-    ports:
-      - "${DB_PORT}:5432"
+      - ./backups:/backups
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
       context: ./backend
-    restart: unless-stopped
+      dockerfile: Dockerfile.prod
+    restart: always
     env_file:
       - ./.env
     environment:
@@ -26,27 +33,37 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - BASE_URL=${BACKEND_URL}
       - FRONTEND_URL=${FRONTEND_URL}
-    depends_on:
-      - db
+    expose:
+      - "${BACKEND_PORT}"
     ports:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${BACKEND_PORT}"]
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:${BACKEND_PORT}"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT}/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build:
       context: ./frontend
+      dockerfile: Dockerfile.prod
       args:
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-    restart: unless-stopped
+    restart: always
     env_file:
       - ./.env
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-    depends_on:
-      - backend
+    expose:
+      - "${FRONTEND_PORT}"
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "${FRONTEND_PORT}"]
+    depends_on:
+      - backend
 
 volumes:
   db_data:

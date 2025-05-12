@@ -25,10 +25,11 @@ app = FastAPI(title="Assistant de Vie Familiale Backend")
 # Session middleware for OAuth and CSRF
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
 
-# CORS
+# CORS - Use frontend URL from settings instead of wildcard
+# When using credentials, specific origins must be listed (not wildcard)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,10 +72,16 @@ async def startup():
 async def root():
     return {"message": "Assistant de Vie Familiale API is running"}
 
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
+
 if __name__ == "__main__":
+    import os
+    port = int(os.getenv("BACKEND_PORT", 56000))
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=59430,
+        port=port,
         reload=True,
     )
