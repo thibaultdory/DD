@@ -248,7 +248,7 @@ const TaskForm: React.FC = () => {
                 value={weekdays}
                 onChange={(_, newWeekdays) => setWeekdays(newWeekdays)}
                 aria-label="jours de la semaine"
-                multiple
+                exclusive={false}
               >
                 <ToggleButton value={1} aria-label="lundi">L</ToggleButton>
                 <ToggleButton value={2} aria-label="mardi">M</ToggleButton>
