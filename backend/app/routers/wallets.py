@@ -7,6 +7,7 @@ from app.core.dependencies import get_current_user, require_parent
 from app.models.wallet import Wallet, WalletTransaction
 from app.schemas import ConvertRequest
 from datetime import datetime
+import logging
 
 router = APIRouter()
 logger = logging.getLogger(__name__) # Add logger instance
