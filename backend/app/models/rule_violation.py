@@ -8,7 +8,7 @@ from app.models.base import Base
 class RuleViolation(Base):
     __tablename__ = "rule_violations"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    rule_id = Column(UUID(as_uuid=True), ForeignKey("contract_rules.id"), nullable=False)
+    rule_id = Column(String, nullable=False)
     child_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     date = Column(Date, nullable=False)
     description = Column(String, nullable=True)
