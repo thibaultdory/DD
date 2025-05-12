@@ -55,7 +55,8 @@ services:
     env_file:
       - ./.env
     environment:
-      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_API_BASE_URL=${BACKEND_URL}/api
+      - FRONTEND_PORT=${FRONTEND_PORT}
     expose:
       - "${FRONTEND_PORT}"
     ports:
