@@ -38,7 +38,7 @@ class PrivilegeUpdate(BaseModel):
     date: Optional[date]
 
 class RuleViolationCreate(BaseModel):
-    ruleId: UUID
+    ruleId: str
     childId: UUID
     date: date
     description: Optional[str]
