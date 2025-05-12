@@ -94,37 +94,39 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
             )
         )
 
-    # Si c'est une tâche récurrente, créer toutes les instances
+    # ------------------------------------------------------------------
+    # NEW  — generate every date from start-date to end-date, one day at a time
+    # ------------------------------------------------------------------
     if task.is_recurring and task.weekdays:
-        # Définir la date de fin (1 an par défaut si non spécifiée)
         end_date = task_in.endDate or (task_in.dueDate + relativedelta(years=1))
-        
-        # Pour chaque jour de la semaine configuré
-        start = task_in.dueDate
-        for weekday in task_in.weekdays:        # ← use original array, avoid ORM side-effects
-            next_date = start if start.isoweekday() == weekday else get_next_weekday(start, weekday)
-            
-            # Créer une instance pour chaque semaine jusqu'à end_date
-            while next_date <= end_date:
+
+        current = task_in.dueDate            # inclusive
+        one_day = timedelta(days=1)
+
+        while current <= end_date:
+            # skip the parent itself, but create an instance for *all*
+            # other dates whose weekday is in the template
+            if current != task_in.dueDate and current.isoweekday() in task.weekdays:
                 instance = Task(
-                    title=task.title,
-                    description=task.description,
-                    due_date=next_date,
-                    created_by=parent.id,
-                    parent_task_id=task.id,
-                    is_recurring=False  # Les instances ne sont pas récurrentes
+                    title            = task.title,
+                    description      = task.description,
+                    due_date         = current,
+                    created_by       = parent.id,
+                    parent_task_id   = task.id,
+                    is_recurring     = False
                 )
                 db.add(instance)
-                await db.flush()  # Ensure instance has an ID
-                # Copier les assignations
+                await db.flush()            # get instance.id
+
                 for user_id in task_in.assignedTo:
                     await db.execute(
                         task_assignments.insert().values(
-                            task_id=instance.id,
-                            user_id=user_id
+                            task_id = instance.id,
+                            user_id = user_id
                         )
                     )
-                next_date += timedelta(days=7)
+
+            current += one_day
 
     await db.commit()
     await db.refresh(task)
