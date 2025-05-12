@@ -23,7 +23,7 @@ import {
 
 // Configuration pour basculer entre les données mock et l'API réelle
 const USE_MOCK_DATA = false;
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL } from '../config.js';
 
 // Créer une instance axios pour l'API réelle
 const api = axios.create({
