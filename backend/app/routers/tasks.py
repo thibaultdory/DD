@@ -100,9 +100,9 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
         end_date = task_in.endDate or (task_in.dueDate + relativedelta(years=1))
         
         # Pour chaque jour de la semaine configuré
-        for weekday in task.weekdays:
-            # Commencer à la première occurrence après la date de début
-            next_date = get_next_weekday(task_in.dueDate, weekday)
+        start = task_in.dueDate
+        for weekday in task_in.weekdays:        # ← use original array, avoid ORM side-effects
+            next_date = start if start.isoweekday() == weekday else get_next_weekday(start, weekday)
             
             # Créer une instance pour chaque semaine jusqu'à end_date
             while next_date <= end_date:
