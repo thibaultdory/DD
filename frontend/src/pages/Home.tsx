@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
+
 import { 
   Typography, 
-  Grid, 
   Paper, 
   Box, 
   Chip, 
@@ -25,12 +25,11 @@ import {
   Assignment, 
   EmojiEvents, 
   Warning,
-  Person,
   Check
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, Privilege, RuleViolation, User, Rule } from '../types';
+import { Task, Privilege, RuleViolation, Rule } from '../types';
 import { 
   taskService, 
   privilegeService, 
@@ -38,7 +37,7 @@ import {
   ruleService 
 } from '../services/api';
 import Layout from '../components/Layout/Layout';
-import { findUserById, findRuleById } from '../mocks/mockData';
+
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -238,7 +237,7 @@ const Home: React.FC = () => {
 
   const handleCompleteTask = async (taskId: string) => {
     try {
-      const updatedTask = await taskService.completeTask(taskId);
+      await taskService.completeTask(taskId);
       // La mise à jour des tâches sera gérée par l'abonnement
     } catch (error) {
       console.error('Error completing task:', error);

@@ -27,11 +27,11 @@ import {
   CardContent,
   CardActions
 } from '@mui/material';
-import { Add, Edit, Delete, CheckCircle, Cancel } from '@mui/icons-material';
+import { Add, Edit, Delete } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
-import { Contract, Rule, User } from '../types';
+import { Contract, Rule } from '../types';
 import { contractService } from '../services/api';
 import Layout from '../components/Layout/Layout';
 
@@ -290,7 +290,7 @@ const Contracts: React.FC = () => {
       ) : (
         <Grid container spacing={3}>
           {contracts.map(contract => (
-            <Grid item xs={12} md={6} key={contract.id}>
+            <Grid size={{ xs: 12, md: 6 }} key={contract.id}>
               <Card 
                 sx={{ 
                   height: '100%', 
@@ -383,7 +383,7 @@ const Contracts: React.FC = () => {
             />
             
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <FormControl fullWidth margin="normal" required>
                   <InputLabel id="child-label">Enfant</InputLabel>
                   <Select
@@ -402,7 +402,7 @@ const Contracts: React.FC = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} sm={6}>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <FormControl fullWidth margin="normal" required>
                   <InputLabel id="parent-label">Parent</InputLabel>
                   <Select
@@ -424,7 +424,7 @@ const Contracts: React.FC = () => {
             </Grid>
             
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={4}>
+              <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField
                   margin="normal"
                   required
@@ -438,7 +438,7 @@ const Contracts: React.FC = () => {
                   onChange={handleInputChange}
                 />
               </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField
                   margin="normal"
                   required
@@ -452,7 +452,7 @@ const Contracts: React.FC = () => {
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField
                   margin="normal"
                   required
@@ -496,7 +496,7 @@ const Contracts: React.FC = () => {
                           secondary={rule.isTask ? 'Tâche à accomplir' : 'Règle à respecter'}
                         />
                       </ListItem>
-                      {index < formData.rules.length - 1 && <Divider />}
+                      {formData.rules && index < formData.rules.length - 1 && <Divider />}
                     </React.Fragment>
                   ))}
                 </List>
