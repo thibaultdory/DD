@@ -72,17 +72,37 @@ def get_next_weekday(start_date: date, target_weekday: int) -> date:
     # Ensure target_weekday is between 1-7 (Monday-Sunday)
     if not 1 <= target_weekday <= 7:
         raise ValueError(f"target_weekday must be between 1-7, got {target_weekday}")
-        
-    days_ahead = target_weekday - start_date.isoweekday()
-    if days_ahead <= 0:  # Si le jour cible est déjà passé cette semaine
+    
+    # Get the current weekday (1-7 for Monday-Sunday)
+    current_weekday = start_date.isoweekday()
+    
+    # Calculate days ahead
+    days_ahead = target_weekday - current_weekday
+    
+    # If the target weekday is earlier in the week or the same day,
+    # move to the next week
+    if days_ahead <= 0:
         days_ahead += 7
-    return start_date + timedelta(days=days_ahead)
+        
+    # Calculate and return the next date
+    next_date = start_date + timedelta(days=days_ahead)
+    print(f"Next occurrence of weekday {target_weekday} from {start_date} is {next_date}")
+    return next_date
 
 @router.post("/tasks")
 async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
     # Log the incoming task data
     print(f"Received task creation request: {task_in}")
     print(f"Is recurring: {task_in.isRecurring}, Weekdays: {task_in.weekdays}")
+    
+    # Validate weekdays if task is recurring
+    if task_in.isRecurring and task_in.weekdays:
+        for weekday in task_in.weekdays:
+            if not 1 <= weekday <= 7:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid weekday value: {weekday}. Weekdays must be between 1-7 (Monday-Sunday)"
+                )
     
     # Créer la tâche principale
     task = Task(
@@ -96,6 +116,7 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
     db.add(task)
     await db.flush()
     await db.refresh(task)
+    print(f"Created main task with ID: {task.id}, weekdays: {task.weekdays}")
 
     # Assigner les utilisateurs
     for uid in task_in.assignedTo:
@@ -109,11 +130,13 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
                 user_id=user.id
             )
         )
+    print(f"Assigned users to main task: {task_in.assignedTo}")
 
     # Si c'est une tâche récurrente, créer toutes les instances
     if task.is_recurring and task.weekdays:
         # Définir la date de fin (1 an par défaut si non spécifiée)
         end_date = task_in.endDate or (task_in.dueDate + relativedelta(years=1))
+        print(f"Recurring task period: {task_in.dueDate} to {end_date}")
         
         # Vérifier que les weekdays sont valides
         valid_weekdays = [wd for wd in task.weekdays if 1 <= wd <= 7]
@@ -125,22 +148,30 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
         
         print(f"Creating recurring tasks for weekdays: {valid_weekdays}")
         
+        # Track total instances created
+        total_instances = 0
+        
         # Pour chaque jour de la semaine configuré
         for weekday in valid_weekdays:
+            print(f"Processing weekday {weekday} ({['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][weekday]})")
+            
             # Commencer à la première occurrence après la date de début
             next_date = get_next_weekday(task_in.dueDate, weekday)
             print(f"First occurrence of weekday {weekday} is on {next_date}")
             
             # Créer une instance pour chaque semaine jusqu'à end_date
             instance_count = 0
-            while next_date <= end_date:
+            current_date = next_date
+            
+            while current_date <= end_date:
                 instance = Task(
                     title=task.title,
                     description=task.description,
-                    due_date=next_date,
+                    due_date=current_date,
                     created_by=parent.id,
                     parent_task_id=task.id,
-                    is_recurring=False  # Les instances ne sont pas récurrentes
+                    is_recurring=False,  # Les instances ne sont pas récurrentes
+                    weekdays=[weekday]  # Store which weekday this instance belongs to
                 )
                 db.add(instance)
                 await db.flush()  # Ensure instance has an ID
@@ -155,9 +186,15 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
                     )
                 
                 instance_count += 1
-                next_date += timedelta(days=7)
+                total_instances += 1
+                
+                # Move to the next week
+                current_date += timedelta(days=7)
+                print(f"Created instance for {current_date - timedelta(days=7)} (weekday {weekday})")
             
             print(f"Created {instance_count} instances for weekday {weekday}")
+        
+        print(f"Total recurring instances created: {total_instances}")
 
     await db.commit()
     await db.refresh(task)

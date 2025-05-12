@@ -108,16 +108,28 @@ const TaskForm: React.FC = () => {
       
       const formattedDueDate = format(dueDate, 'yyyy-MM-dd');
       
+      // Map weekday numbers to day names for better logging
+      const dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const selectedDays = isRecurring ? weekdays.map(day => `${day} (${dayNames[day]})`) : [];
+      
+      if (isRecurring) {
+        console.log('Task is recurring with the following weekdays:');
+        console.log('Raw weekday values:', weekdays);
+        console.log('Selected days:', selectedDays.join(', '));
+      }
+      
       if (isEditing && taskId) {
         console.log('Updating task with weekdays:', isRecurring ? weekdays : undefined);
-        await taskService.updateTask(taskId, {
+        const updateData = {
           title,
           description,
           dueDate: formattedDueDate,
           assignedTo,
           isRecurring,
           weekdays: isRecurring ? weekdays : undefined
-        });
+        };
+        console.log('Update data being sent:', updateData);
+        await taskService.updateTask(taskId, updateData);
         setSuccess('Tâche mise à jour avec succès');
       } else {
         console.log('Creating task with weekdays:', isRecurring ? weekdays : undefined);
@@ -252,6 +264,10 @@ const TaskForm: React.FC = () => {
                 value={weekdays}
                 onChange={(_, newWeekdays) => {
                   console.log('Selected weekdays:', newWeekdays);
+                  // Map weekday numbers to day names for better logging
+                  const dayNames = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                  const selectedDays = newWeekdays.map(day => `${day} (${dayNames[day]})`);
+                  console.log('Selected days:', selectedDays.join(', '));
                   setWeekdays(newWeekdays);
                 }}
                 aria-label="jours de la semaine"
