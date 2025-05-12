@@ -440,6 +440,7 @@ export const ruleViolationService = {
     }
     
     const response = await api.post('/rule-violations', violation);
+    notifyChange('violations');
     return response.data;
   },
 
@@ -456,6 +457,7 @@ export const ruleViolationService = {
     }
     
     await api.delete(`/rule-violations/${violationId}`);
+    notifyChange('violations');
   }
 };
 
