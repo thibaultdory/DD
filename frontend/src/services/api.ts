@@ -23,7 +23,8 @@ import {
 
 // Configuration pour basculer entre les données mock et l'API réelle
 const USE_MOCK_DATA = false;
-import { API_BASE_URL } from '../config.js';
+// API_BASE_URL is defined in the global scope by the config.js script
+declare const API_BASE_URL: string;
 
 // Créer une instance axios pour l'API réelle
 const api = axios.create({
@@ -33,7 +34,6 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
-export { API_BASE_URL };
 
 // Événements pour notifier les changements de données
 type DataChangeListener = () => void;

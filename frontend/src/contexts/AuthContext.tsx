@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AuthState } from '../types';
-import { authService, API_BASE_URL } from '../services/api';
+import { authService } from '../services/api';
+// API_BASE_URL is defined in the global scope by the config.js script
+declare const API_BASE_URL: string;
 
 // Valeurs par défaut du contexte
 const defaultAuthState: AuthState = {
