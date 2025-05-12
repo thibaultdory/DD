@@ -47,8 +47,9 @@ const PrivilegeForm: React.FC = () => {
       if (isEditing && privilegeId) {
         try {
           setLoading(true);
-          const privileges = await privilegeService.getPrivileges();
-          const privilege = privileges.find(p => p.id === privilegeId);
+          const privilegesResponse = await privilegeService.getPrivileges();
+          const privilegesList = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
+          const privilege = privilegesList.find((p: any) => p.id === privilegeId);
           
           if (privilege) {
             setTitle(privilege.title);

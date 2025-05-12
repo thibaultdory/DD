@@ -43,7 +43,7 @@ const Profile: React.FC = () => {
       </Box>
 
       <Grid container spacing={4}>
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 3 }}>
               <Avatar
@@ -67,7 +67,7 @@ const Profile: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={8}>
+        <Grid size={{ xs: 12, md: 8 }}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Membres de la famille

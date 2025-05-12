@@ -53,8 +53,9 @@ const TaskForm: React.FC = () => {
       if (isEditing && taskId) {
         try {
           setLoading(true);
-          const tasks = await taskService.getTasks();
-          const task = tasks.find(t => t.id === taskId);
+          const tasksResponse = await taskService.getTasks();
+          const tasksList = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
+          const task = tasksList.find((t: any) => t.id === taskId);
           
           if (task) {
             setTitle(task.title);
@@ -245,9 +246,8 @@ const TaskForm: React.FC = () => {
               </Typography>
               <ToggleButtonGroup
                 value={weekdays}
-                onChange={(e, newWeekdays) => setWeekdays(newWeekdays)}
+                onChange={(_, newWeekdays) => setWeekdays(newWeekdays)}
                 aria-label="jours de la semaine"
-                multiple
               >
                 <ToggleButton value={1} aria-label="lundi">L</ToggleButton>
                 <ToggleButton value={2} aria-label="mardi">M</ToggleButton>

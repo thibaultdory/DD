@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, AuthState } from '../types';
+import { AuthState } from '../types';
 import { authService, API_BASE_URL } from '../services/api';
 
 // Valeurs par défaut du contexte

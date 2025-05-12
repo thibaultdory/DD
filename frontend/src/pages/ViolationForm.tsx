@@ -52,8 +52,9 @@ const ViolationForm: React.FC = () => {
         
         // Si on est en mode édition, récupérer l'infraction
         if (isEditing && violationId) {
-          const violations = await ruleViolationService.getRuleViolations();
-          const violation = violations.find(v => v.id === violationId);
+          const violationsResponse = await ruleViolationService.getRuleViolations();
+          const violationsList = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
+          const violation = violationsList.find((v: any) => v.id === violationId);
           
           if (violation) {
             setRuleId(violation.ruleId);
