@@ -89,19 +89,25 @@ const Calendar: React.FC = () => {
               ? selectedChild 
               : authState.currentUser.id;
             
-            fetchedTasks = await taskService.getUserTasks(userId);
-            fetchedPrivileges = await privilegeService.getUserPrivileges(userId);
-            fetchedViolations = await ruleViolationService.getChildRuleViolations(userId);
+            const tasksResponse = await taskService.getUserTasks(userId);
+            fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
+            const privilegesResponse = await privilegeService.getUserPrivileges(userId);
+            fetchedPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
+            const violationsResponse = await ruleViolationService.getChildRuleViolations(userId);
+            fetchedViolations = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
           } else {
             // Vue familiale
-            fetchedTasks = await taskService.getTasks();
-            fetchedPrivileges = await privilegeService.getPrivileges();
-            fetchedViolations = await ruleViolationService.getRuleViolations();
+            const tasksResponse = await taskService.getTasks();
+            fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
+            const privilegesResponse = await privilegeService.getPrivileges();
+            fetchedPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
+            const violationsResponse = await ruleViolationService.getRuleViolations();
+            fetchedViolations = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
           }
 
-          setTasks(fetchedTasks);
-          setPrivileges(fetchedPrivileges);
-          setViolations(fetchedViolations);
+          setTasks(Array.isArray(fetchedTasks) ? fetchedTasks : []);
+          setPrivileges(Array.isArray(fetchedPrivileges) ? fetchedPrivileges : []);
+          setViolations(Array.isArray(fetchedViolations) ? fetchedViolations : []);
         }
       } catch (error) {
         console.error('Error fetching calendar data:', error);
@@ -119,9 +125,15 @@ const Calendar: React.FC = () => {
           const userId = authState.currentUser.isParent && selectedChild 
             ? selectedChild 
             : authState.currentUser.id;
-          taskService.getUserTasks(userId).then(setTasks);
+          taskService.getUserTasks(userId).then(response => {
+            const tasks = Array.isArray(response) ? response : (response.tasks || []);
+            setTasks(tasks);
+          });
         } else {
-          taskService.getTasks().then(setTasks);
+          taskService.getTasks().then(response => {
+            const tasks = Array.isArray(response) ? response : (response.tasks || []);
+            setTasks(tasks);
+          });
         }
       }
     });
@@ -132,9 +144,15 @@ const Calendar: React.FC = () => {
           const userId = authState.currentUser.isParent && selectedChild 
             ? selectedChild 
             : authState.currentUser.id;
-          privilegeService.getUserPrivileges(userId).then(setPrivileges);
+          privilegeService.getUserPrivileges(userId).then(response => {
+            const privileges = Array.isArray(response) ? response : (response.privileges || []);
+            setPrivileges(privileges);
+          });
         } else {
-          privilegeService.getPrivileges().then(setPrivileges);
+          privilegeService.getPrivileges().then(response => {
+            const privileges = Array.isArray(response) ? response : (response.privileges || []);
+            setPrivileges(privileges);
+          });
         }
       }
     });
@@ -145,9 +163,15 @@ const Calendar: React.FC = () => {
           const userId = authState.currentUser.isParent && selectedChild 
             ? selectedChild 
             : authState.currentUser.id;
-          ruleViolationService.getChildRuleViolations(userId).then(setViolations);
+          ruleViolationService.getChildRuleViolations(userId).then(response => {
+            const violations = Array.isArray(response) ? response : (response.violations || []);
+            setViolations(violations);
+          });
         } else {
-          ruleViolationService.getRuleViolations().then(setViolations);
+          ruleViolationService.getRuleViolations().then(response => {
+            const violations = Array.isArray(response) ? response : (response.violations || []);
+            setViolations(violations);
+          });
         }
       }
     });
@@ -198,15 +222,15 @@ const Calendar: React.FC = () => {
   };
 
   const getTasksForDay = (date: Date) => {
-    return tasks.filter(task => isSameDay(parseISO(task.dueDate), date));
+    return Array.isArray(tasks) ? tasks.filter(task => isSameDay(parseISO(task.dueDate), date)) : [];
   };
 
   const getPrivilegesForDay = (date: Date) => {
-    return privileges.filter(privilege => isSameDay(parseISO(privilege.date), date));
+    return Array.isArray(privileges) ? privileges.filter(privilege => isSameDay(parseISO(privilege.date), date)) : [];
   };
 
   const getViolationsForDay = (date: Date) => {
-    return violations.filter(violation => isSameDay(parseISO(violation.date), date));
+    return Array.isArray(violations) ? violations.filter(violation => isSameDay(parseISO(violation.date), date)) : [];
   };
 
   // Fonction pour obtenir le nom de l'utilisateur à partir de son ID
