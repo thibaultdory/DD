@@ -16,4 +16,4 @@ class RuleViolation(Base):
 
     child = relationship("User", foreign_keys=[child_id])
     reporter = relationship("User", foreign_keys=[reported_by])
-    contract = relationship("ContractRule", foreign_keys=[rule_id])
+    # contract = relationship("ContractRule", foreign_keys=[rule_id])
