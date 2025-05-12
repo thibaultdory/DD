@@ -3,7 +3,6 @@ import {
   Box, 
   Typography, 
   Paper, 
-  Grid, 
   ToggleButton, 
   ToggleButtonGroup, 
   Chip,
@@ -34,7 +33,7 @@ import {
 import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, Privilege, RuleViolation, User, Rule } from '../types';
+import { Task, Privilege, RuleViolation, Rule } from '../types';
 import { 
   taskService, 
   privilegeService, 
@@ -51,7 +50,7 @@ const Calendar: React.FC = () => {
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate] = useState(new Date());
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);

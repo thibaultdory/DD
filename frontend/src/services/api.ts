@@ -18,8 +18,7 @@ import {
   mockWallets,
   mockWalletTransactions,
   mockRules,
-  findUserById,
-  findRuleById
+
 } from '../mocks/mockData';
 
 // Configuration pour basculer entre les données mock et l'API réelle
@@ -111,7 +110,7 @@ export const ruleService = {
   // Récupérer une règle par ID
   async getRule(ruleId: string): Promise<Rule | null> {
     if (USE_MOCK_DATA) {
-      const rule = findRuleById(ruleId);
+      const rule = mockRules.find(r => r.id === ruleId);
       return rule || null;
     }
     
