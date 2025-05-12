@@ -395,7 +395,16 @@ export const ruleViolationService = {
     const response = await api.get('/rule-violations', {
       params: { page, limit }
     });
-    return response.data;
+    // Adapter la réponse si l'API renvoie un tableau directement
+    const violations = Array.isArray(response.data) ? response.data : [];
+    const total = violations.length; // Le backend ne semble pas paginer, on calcule le total ici
+    const paginatedViolations = violations.slice((page - 1) * limit, page * limit);
+    
+    return {
+      violations: paginatedViolations,
+      total: total
+    };
+    // return response.data;
   },
 
   // Récupérer les infractions d'un enfant spécifique avec pagination
@@ -414,7 +423,16 @@ export const ruleViolationService = {
     const response = await api.get(`/rule-violations/child/${childId}`, {
       params: { page, limit }
     });
-    return response.data;
+    // Adapter la réponse si l'API renvoie un tableau directement
+    const violations = Array.isArray(response.data) ? response.data : [];
+    const total = violations.length; // Le backend ne semble pas paginer, on calcule le total ici
+    const paginatedViolations = violations.slice((page - 1) * limit, page * limit);
+    
+    return {
+      violations: paginatedViolations,
+      total: total
+    };
+    // return response.data;
   },
 
   // Récupérer les infractions pour une date spécifique
