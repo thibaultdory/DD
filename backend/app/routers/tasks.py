@@ -8,8 +8,10 @@ from app.models.user import User
 from app.schemas import TaskCreate, TaskUpdate
 from datetime import date
 from uuid import UUID
+import logging # Import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__) # Add logger instance
 
 async def serialize_task(task: Task, db: AsyncSession):
     # Get assigned users directly from the association table
@@ -68,178 +70,215 @@ def get_next_weekday(start_date: date, target_weekday: int) -> date:
 
 @router.post("/tasks")
 async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    # Créer la tâche principale
-    task = Task(
-        title=task_in.title,
-        description=task_in.description,
-        due_date=task_in.dueDate,
-        created_by=parent.id,
-        is_recurring=task_in.isRecurring,
-        weekdays=task_in.weekdays if task_in.isRecurring else None,
-    )
-    db.add(task)
-    await db.flush()
-    await db.refresh(task)
-
-    # Assigner les utilisateurs
-    for uid in task_in.assignedTo:
-        user = await db.get(User, uid)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {uid} not found")
-        # Insert directly into the association table
-        await db.execute(
-            task_assignments.insert().values(
-                task_id=task.id,
-                user_id=user.id
-            )
+    try:
+        logger.info(f"Creating task '{task_in.title}' due {task_in.dueDate}, recurring: {task_in.isRecurring}")
+        # Créer la tâche principale
+        task = Task(
+            title=task_in.title,
+            description=task_in.description,
+            due_date=task_in.dueDate,
+            created_by=parent.id,
+            is_recurring=task_in.isRecurring,
+            weekdays=task_in.weekdays if task_in.isRecurring else None,
         )
+        db.add(task)
+        await db.flush()
+        await db.refresh(task)
+        logger.debug(f"Created base task with ID: {task.id}")
 
-    # ------------------------------------------------------------------
-    # NEW  — generate every date from start-date to end-date, one day at a time
-    # ------------------------------------------------------------------
-    if task.is_recurring and task.weekdays:
-        end_date = task_in.endDate or (task_in.dueDate + relativedelta(years=1))
-
-        current = task_in.dueDate            # inclusive
-        one_day = timedelta(days=1)
-
-        while current <= end_date:
-            # skip the parent itself, but create an instance for *all*
-            # other dates whose weekday is in the template
-            if current != task_in.dueDate and current.isoweekday() in task.weekdays:
-                instance = Task(
-                    title            = task.title,
-                    description      = task.description,
-                    due_date         = current,
-                    created_by       = parent.id,
-                    parent_task_id   = task.id,
-                    is_recurring     = False
-                )
-                db.add(instance)
-                await db.flush()            # get instance.id
-
-                for user_id in task_in.assignedTo:
-                    await db.execute(
-                        task_assignments.insert().values(
-                            task_id = instance.id,
-                            user_id = user_id
-                        )
-                    )
-
-            current += one_day
-
-    await db.commit()
-    await db.refresh(task)
-    return await serialize_task(task, db)
-
-@router.put("/tasks/{task_id}")
-async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    task = await db.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    if task.created_by != parent.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task")
-
-    data = updates.dict(exclude_unset=True)
-
-    # Si c'est une instance d'une tâche récurrente, on ne peut modifier que completed
-    if task.parent_task_id and len(data) > 1 or (len(data) == 1 and "completed" not in data):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only the completion status can be updated for recurring task instances"
-        )
-
-    # Si c'est une tâche récurrente parente, on met à jour toutes les instances futures
-    is_recurring_parent = task.is_recurring and not task.parent_task_id
-    update_future_instances = is_recurring_parent and any(
-        field in data for field in ["title", "description", "assignedTo"]
-    )
-
-    # Mettre à jour la tâche principale
-    if "title" in data:
-        task.title = data["title"]
-    if "description" in data:
-        task.description = data["description"]
-    if "dueDate" in data:
-        task.due_date = data["dueDate"]
-    if "completed" in data:
-        task.completed = data["completed"]
-    if "isRecurring" in data:
-        task.is_recurring = data["isRecurring"]
-    if "weekdays" in data:
-        task.weekdays = data["weekdays"]
-    if "assignedTo" in data:
-        # Delete existing assignments
-        await db.execute(
-            task_assignments.delete().where(task_assignments.c.task_id == task.id)
-        )
-        # Add new assignments
-        for uid in data["assignedTo"]:
+        # Assigner les utilisateurs
+        for uid in task_in.assignedTo:
             user = await db.get(User, uid)
             if not user:
+                logger.warning(f"User {uid} not found during task creation, rolling back.")
+                await db.rollback()
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {uid} not found")
+            # Insert directly into the association table
             await db.execute(
                 task_assignments.insert().values(
                     task_id=task.id,
                     user_id=user.id
                 )
             )
+            logger.debug(f"Assigned user {uid} to task {task.id}")
 
-    # Si nécessaire, mettre à jour les instances futures de la tâche récurrente
-    if update_future_instances:
-        today = date.today()
-        # Récupérer toutes les instances futures
-        result = await db.execute(
-            select(Task).where(
-                Task.parent_task_id == task_id,
-                Task.due_date >= today
-            )
-        )
-        future_instances = result.scalars().all()
+        # Generate recurring instances
+        if task.is_recurring and task.weekdays:
+            end_date = task_in.endDate or (task_in.dueDate + relativedelta(years=1))
+            logger.info(f"Generating recurring instances for task {task.id} until {end_date}")
+            current = task_in.dueDate
+            one_day = timedelta(days=1)
 
-        # Mettre à jour chaque instance
-        for instance in future_instances:
-            if "title" in data:
-                instance.title = data["title"]
-            if "description" in data:
-                instance.description = data["description"]
-            if "assignedTo" in data:
-                # Delete existing assignments
-                await db.execute(
-                    task_assignments.delete().where(task_assignments.c.task_id == instance.id)
-                )
-                # Add new assignments
-                for uid in data["assignedTo"]:
-                    await db.execute(
-                        task_assignments.insert().values(
-                            task_id=instance.id,
-                            user_id=uid
-                        )
+            while current <= end_date:
+                if current != task_in.dueDate and current.isoweekday() in task.weekdays:
+                    instance = Task(
+                        title            = task.title,
+                        description      = task.description,
+                        due_date         = current,
+                        created_by       = parent.id,
+                        parent_task_id   = task.id,
+                        is_recurring     = False
                     )
+                    db.add(instance)
+                    await db.flush() # get instance.id
+                    logger.debug(f"Created recurring instance {instance.id} for date {current}")
 
-    await db.commit()
-    await db.refresh(task)
-    return serialize_task(task)
+                    for user_id in task_in.assignedTo:
+                        await db.execute(
+                            task_assignments.insert().values(
+                                task_id = instance.id,
+                                user_id = user_id
+                            )
+                        )
+                        logger.debug(f"Assigned user {user_id} to instance {instance.id}")
+                current += one_day
+
+        await db.commit()
+        await db.refresh(task) # Refresh to get potentially updated relationships
+        logger.info(f"Successfully created task {task.id} and its instances (if recurring).")
+        return await serialize_task(task, db)
+    except Exception as e:
+        logger.error(f"Failed to create task: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create task")
+
+@router.put("/tasks/{task_id}")
+async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
+    task = await db.get(Task, task_id)
+    if not task:
+        logger.warning(f"Update attempt on non-existent task: {task_id}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    if task.created_by != parent.id:
+        logger.warning(f"Unauthorized update attempt on task {task_id} by user {parent.id}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task")
+
+    try:
+        data = updates.dict(exclude_unset=True)
+        logger.info(f"Updating task {task_id} with data: {data}")
+
+        # Si c'est une instance d'une tâche récurrente, on ne peut modifier que completed
+        if task.parent_task_id and len(data) > 1 or (len(data) == 1 and "completed" not in data):
+            logger.warning(f"Attempt to update restricted fields on recurring task instance {task_id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only the completion status can be updated for recurring task instances"
+            )
+
+        # Si c'est une tâche récurrente parente, on met à jour toutes les instances futures
+        is_recurring_parent = task.is_recurring and not task.parent_task_id
+        update_future_instances = is_recurring_parent and any(
+            field in data for field in ["title", "description", "assignedTo"]
+        )
+
+        # Mettre à jour la tâche principale
+        if "title" in data:
+            task.title = data["title"]
+        if "description" in data:
+            task.description = data["description"]
+        if "dueDate" in data:
+            task.due_date = data["dueDate"]
+        if "completed" in data:
+            task.completed = data["completed"]
+        if "isRecurring" in data:
+            task.is_recurring = data["isRecurring"]
+        if "weekdays" in data:
+            task.weekdays = data["weekdays"]
+        if "assignedTo" in data:
+            logger.debug(f"Updating assignments for task {task_id}")
+            # Delete existing assignments
+            await db.execute(
+                task_assignments.delete().where(task_assignments.c.task_id == task.id)
+            )
+            # Add new assignments
+            for uid in data["assignedTo"]:
+                user = await db.get(User, uid)
+                if not user:
+                    logger.warning(f"User {uid} not found during task update, rolling back.")
+                    await db.rollback()
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {uid} not found")
+                await db.execute(
+                    task_assignments.insert().values(
+                        task_id=task.id,
+                        user_id=user.id
+                    )
+                )
+                logger.debug(f"Assigned user {uid} to task {task.id}")
+
+        # Si nécessaire, mettre à jour les instances futures de la tâche récurrente
+        if update_future_instances:
+            today = date.today()
+            logger.info(f"Updating future instances of recurring task {task_id}")
+            # Récupérer toutes les instances futures
+            result = await db.execute(
+                select(Task).where(
+                    Task.parent_task_id == task_id,
+                    Task.due_date >= today
+                )
+            )
+            future_instances = result.scalars().all()
+            logger.debug(f"Found {len(future_instances)} future instances to update.")
+
+            # Mettre à jour chaque instance
+            for instance in future_instances:
+                if "title" in data:
+                    instance.title = data["title"]
+                if "description" in data:
+                    instance.description = data["description"]
+                if "assignedTo" in data:
+                    logger.debug(f"Updating assignments for instance {instance.id}")
+                    # Delete existing assignments
+                    await db.execute(
+                        task_assignments.delete().where(task_assignments.c.task_id == instance.id)
+                    )
+                    # Add new assignments
+                    for uid in data["assignedTo"]:
+                        # User existence already checked for parent task
+                        await db.execute(
+                            task_assignments.insert().values(
+                                task_id=instance.id,
+                                user_id=uid
+                            )
+                        )
+                        logger.debug(f"Assigned user {uid} to instance {instance.id}")
+
+        await db.commit()
+        await db.refresh(task)
+        logger.info(f"Successfully updated task {task_id}")
+        # Need to pass db to serialize_task
+        return await serialize_task(task, db)
+    except Exception as e:
+        logger.error(f"Failed to update task {task_id}: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update task")
 
 @router.put("/tasks/{task_id}/complete")
 async def complete_task(task_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     task = await db.get(Task, task_id)
     if not task:
+        logger.warning(f"Complete attempt on non-existent task: {task_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    # Check if user is assigned to task
-    result = await db.execute(
-        select(task_assignments).where(
-            task_assignments.c.task_id == task.id,
-            task_assignments.c.user_id == current_user.id
+    try:
+        # Check if user is assigned to task
+        result = await db.execute(
+            select(task_assignments).where(
+                task_assignments.c.task_id == task.id,
+                task_assignments.c.user_id == current_user.id
+            )
         )
-    )
-    is_assigned = result.first() is not None
-    if not (current_user.is_parent or is_assigned):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    task.completed = True
-    await db.commit()
-    await db.refresh(task)
-    return await serialize_task(task, db)
+        is_assigned = result.first() is not None
+        if not (current_user.is_parent or is_assigned):
+            logger.warning(f"Unauthorized complete attempt on task {task_id} by user {current_user.id}")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        
+        task.completed = True
+        await db.commit()
+        await db.refresh(task)
+        logger.info(f"Task {task_id} marked as completed by user {current_user.id}")
+        return await serialize_task(task, db)
+    except Exception as e:
+        logger.error(f"Failed to mark task {task_id} as complete: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to complete task")
 
 @router.delete("/tasks/{task_id}")
 async def delete_task(
@@ -250,31 +289,46 @@ async def delete_task(
 ):
     task = await db.get(Task, task_id)
     if not task:
+        logger.warning(f"Delete attempt on non-existent task: {task_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     if task.created_by != parent.id:
+        logger.warning(f"Unauthorized delete attempt on task {task_id} by user {parent.id}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this task")
 
-    # Si c'est une instance d'une tâche récurrente
-    if task.parent_task_id:
-        await db.delete(task)
-    # Si c'est une tâche récurrente parente
-    elif task.is_recurring:
-        if delete_future:
-            # Supprimer toutes les instances futures
-            today = date.today()
-            result = await db.execute(
-                select(Task).where(
-                    Task.parent_task_id == task_id,
-                    Task.due_date >= today
+    try:
+        logger.info(f"Deleting task {task_id} (delete_future={delete_future})")
+        # Si c'est une instance d'une tâche récurrente
+        if task.parent_task_id:
+            logger.debug(f"Deleting recurring task instance {task_id}")
+            await db.delete(task)
+        # Si c'est une tâche récurrente parente
+        elif task.is_recurring:
+            if delete_future:
+                logger.info(f"Deleting future instances of recurring task {task_id}")
+                # Supprimer toutes les instances futures
+                today = date.today()
+                result = await db.execute(
+                    select(Task).where(
+                        Task.parent_task_id == task_id,
+                        Task.due_date >= today
+                    )
                 )
-            )
-            future_instances = result.scalars().all()
-            for instance in future_instances:
-                await db.delete(instance)
-        await db.delete(task)
-    # Si c'est une tâche normale
-    else:
-        await db.delete(task)
+                future_instances = result.scalars().all()
+                logger.debug(f"Found {len(future_instances)} future instances to delete.")
+                for instance in future_instances:
+                    logger.debug(f"Deleting instance {instance.id}")
+                    await db.delete(instance)
+            logger.debug(f"Deleting recurring task parent {task_id}")
+            await db.delete(task)
+        # Si c'est une tâche normale
+        else:
+            logger.debug(f"Deleting non-recurring task {task_id}")
+            await db.delete(task)
 
-    await db.commit()
-    return {"success": True}
+        await db.commit()
+        logger.info(f"Successfully deleted task {task_id} and relevant instances.")
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Failed to delete task {task_id}: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete task")

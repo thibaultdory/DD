@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 from datetime import date
+import logging # Import logging
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_parent
@@ -10,6 +11,7 @@ from app.models.rule_violation import RuleViolation
 from app.schemas import RuleViolationCreate
 from app.models.user import User
 
+logger = logging.getLogger(__name__) # Add logger instance
 router = APIRouter()
 
 def serialize_violation(v: RuleViolation):
@@ -38,7 +40,8 @@ async def get_child_violations(child_id: UUID, parent: User = Depends(require_pa
 async def get_date_violations(date_str: str, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
     try:
         day = date.fromisoformat(date_str)
-    except ValueError:
+    except ValueError as e:
+        logger.warning(f"Invalid date format received: {date_str}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid date format")
     result = await db.execute(select(RuleViolation).where(RuleViolation.date == day))
     violations = result.scalars().all()
@@ -46,23 +49,36 @@ async def get_date_violations(date_str: str, parent: User = Depends(require_pare
 
 @router.post("/rule-violations")
 async def create_violation(v_in: RuleViolationCreate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    violation = RuleViolation(
-        rule_id=v_in.ruleId,
-        child_id=v_in.childId,
-        date=v_in.date,
-        description=v_in.description,
-        reported_by=v_in.reportedBy,
-    )
-    db.add(violation)
-    await db.commit()
-    await db.refresh(violation)
-    return serialize_violation(violation)
+    try:
+        violation = RuleViolation(
+            rule_id=v_in.ruleId,
+            child_id=v_in.childId,
+            date=v_in.date,
+            description=v_in.description,
+            reported_by=v_in.reportedBy,
+        )
+        db.add(violation)
+        await db.commit()
+        await db.refresh(violation)
+        logger.info(f"Created rule violation for child {v_in.childId} on {v_in.date} (Rule ID: {v_in.ruleId})")
+        return serialize_violation(violation)
+    except Exception as e:
+        logger.error(f"Failed to create rule violation: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create rule violation")
 
 @router.delete("/rule-violations/{violation_id}")
 async def delete_violation(violation_id: UUID, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
     violation = await db.get(RuleViolation, violation_id)
     if not violation:
+        logger.warning(f"Delete attempt on non-existent rule violation: {violation_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Violation not found")
-    await db.delete(violation)
-    await db.commit()
-    return {"success": True}
+    try:
+        await db.delete(violation)
+        await db.commit()
+        logger.info(f"Successfully deleted rule violation {violation_id}")
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Failed to delete rule violation {violation_id}: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete rule violation")

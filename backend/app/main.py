@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.core.initial_data import seed_initial_data
 from app.core.jobs import process_daily_rewards
+from app.core.logging_config import setup_logging  # Import setup_logging
 from app.scheduler import create_recurring_task_instances
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.routers.auth import router as auth_router
@@ -59,6 +60,7 @@ app.include_router(rules_router, prefix="/api", tags=["rules"])
 
 @app.on_event("startup")
 async def startup():
+    setup_logging()  # Initialize logging
     # Create tables and seed initial data
     await init_db()
     await seed_initial_data()
