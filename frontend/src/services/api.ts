@@ -205,8 +205,17 @@ export const taskService = {
       return newTask;
     }
     
-    const response = await api.post('/tasks', task);
-    return response.data;
+    console.log('API service sending task data:', task);
+    console.log('Weekdays being sent:', task.weekdays);
+    
+    try {
+      const response = await api.post('/tasks', task);
+      console.log('API response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error creating task:', error);
+      throw error;
+    }
   },
 
   // Mettre à jour une tâche

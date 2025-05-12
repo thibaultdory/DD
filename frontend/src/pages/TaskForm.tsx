@@ -109,6 +109,7 @@ const TaskForm: React.FC = () => {
       const formattedDueDate = format(dueDate, 'yyyy-MM-dd');
       
       if (isEditing && taskId) {
+        console.log('Updating task with weekdays:', isRecurring ? weekdays : undefined);
         await taskService.updateTask(taskId, {
           title,
           description,
@@ -119,7 +120,8 @@ const TaskForm: React.FC = () => {
         });
         setSuccess('Tâche mise à jour avec succès');
       } else {
-        await taskService.createTask({
+        console.log('Creating task with weekdays:', isRecurring ? weekdays : undefined);
+        const taskData = {
           title,
           description,
           dueDate: formattedDueDate,
@@ -128,7 +130,9 @@ const TaskForm: React.FC = () => {
           createdBy: authState.currentUser?.id || '',
           isRecurring,
           weekdays: isRecurring ? weekdays : undefined
-        });
+        };
+        console.log('Task data being sent:', taskData);
+        await taskService.createTask(taskData);
         setSuccess('Tâche créée avec succès');
       }
       
@@ -246,7 +250,10 @@ const TaskForm: React.FC = () => {
               </Typography>
               <ToggleButtonGroup
                 value={weekdays}
-                onChange={(_, newWeekdays) => setWeekdays(newWeekdays)}
+                onChange={(_, newWeekdays) => {
+                  console.log('Selected weekdays:', newWeekdays);
+                  setWeekdays(newWeekdays);
+                }}
                 aria-label="jours de la semaine"
               >
                 <ToggleButton value={1} aria-label="lundi">L</ToggleButton>

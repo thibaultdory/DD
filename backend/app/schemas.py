@@ -13,6 +13,18 @@ class TaskCreate(BaseModel):
     isRecurring: bool = False
     weekdays: Optional[List[int]] = None  # 1-7 pour lundi-dimanche
     endDate: Optional[date] = None  # Pour les tâches récurrentes, date de fin optionnelle (par défaut 1 an)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "Faire ses devoirs",
+                "description": "Terminer les exercices de mathématiques",
+                "assignedTo": ["550e8400-e29b-41d4-a716-446655440000"],
+                "dueDate": "2025-05-15",
+                "isRecurring": True,
+                "weekdays": [1, 3, 5]  # Lundi, Mercredi, Vendredi
+            }
+        }
 
 class TaskUpdate(BaseModel):
     title: Optional[str]
