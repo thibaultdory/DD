@@ -29,10 +29,12 @@ import {
   Warning,
   Info,
   Check,
-  Undo
+  Undo,
+  Edit // Add Edit icon
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, isSameDay, parseISO, isPast, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, Privilege, RuleViolation, Rule } from '../types';
 import { 
@@ -45,6 +47,7 @@ import Layout from '../components/Layout/Layout';
 
 const Calendar: React.FC = () => {
   const { authState } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
@@ -365,6 +368,16 @@ const Calendar: React.FC = () => {
                                 {task.title}
                               </Typography>
                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                {authState.currentUser?.isParent && (
+                                  <Tooltip title="Modifier la tâche">
+                                    <IconButton 
+                                      size="small" 
+                                      onClick={() => navigate(`/tasks/edit/${task.id}`)}
+                                    >
+                                      <Edit fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
                                 {viewMode === 'family' && (
                                   <Chip 
                                     label={getUserName(task.assignedTo[0])} 
@@ -475,6 +488,16 @@ const Calendar: React.FC = () => {
                                 {getRuleName(violation.ruleId)}
                               </Typography>
                               <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                {authState.currentUser?.isParent && (
+                                  <Tooltip title="Modifier l'infraction">
+                                    <IconButton 
+                                      size="small" 
+                                      onClick={() => navigate(`/violations/edit/${violation.id}`)}
+                                    >
+                                      <Edit fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
                                 {viewMode === 'family' && (
                                   <Chip 
                                     label={getUserName(violation.childId)} 
