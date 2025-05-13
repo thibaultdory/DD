@@ -26,7 +26,8 @@ import {
   EmojiEvents, 
   Warning,
   Check,
-  Undo
+  Undo,
+  Edit // Add Edit icon
 } from '@mui/icons-material';
 import { parseISO, isPast, isToday } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -357,30 +358,43 @@ const Home: React.FC = () => {
                 <React.Fragment key={task.id}>
                   <ListItem
                     secondaryAction={
-                      task.completed ? (
-                        <Tooltip title="Marquer comme non terminé">
-                          <IconButton
-                            edge="end"
-                            aria-label="uncomplete"
-                            onClick={() => handleToggleTaskComplete(task)}
-                          >
-                            <Undo />
-                          </IconButton>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
-                          <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {authState.currentUser?.isParent && (
+                          <Tooltip title="Modifier la tâche">
                             <IconButton
                               edge="end"
-                              aria-label="complete"
-                              onClick={() => handleToggleTaskComplete(task)}
-                              disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                              aria-label="edit"
+                              onClick={() => navigate(`/tasks/edit/${task.id}`)}
                             >
-                              <Check />
+                              <Edit />
                             </IconButton>
-                          </span>
-                        </Tooltip>
-                      )
+                          </Tooltip>
+                        )}
+                        {task.completed ? (
+                          <Tooltip title="Marquer comme non terminé">
+                            <IconButton
+                              edge="end"
+                              aria-label="uncomplete"
+                              onClick={() => handleToggleTaskComplete(task)}
+                            >
+                              <Undo />
+                            </IconButton>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                            <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */}
+                              <IconButton
+                                edge="end"
+                                aria-label="complete"
+                                onClick={() => handleToggleTaskComplete(task)}
+                                disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                              >
+                                <Check />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        )}
+                      </Box>
                     }
                   >
                     <ListItemIcon>
@@ -535,7 +549,19 @@ const Home: React.FC = () => {
             <List>
               {violations.map((violation) => (
                 <React.Fragment key={violation.id}>
-                  <ListItem>
+                  <ListItem
+                    secondaryAction={authState.currentUser?.isParent && (
+                      <Tooltip title="Modifier l'infraction">
+                        <IconButton
+                          edge="end"
+                          aria-label="edit"
+                          onClick={() => navigate(`/violations/edit/${violation.id}`)}
+                        >
+                          <Edit />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  >
                     <ListItemIcon>
                       <Warning color="warning" />
                     </ListItemIcon>

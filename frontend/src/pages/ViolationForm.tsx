@@ -133,6 +133,28 @@ const ViolationForm: React.FC = () => {
       setLoading(false);
     }
   };
+\
+  const handleDelete = async () => {
+    if (!violationId) return;
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await ruleViolationService.deleteRuleViolation(violationId);
+      setSuccess('Infraction supprimée avec succès');
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
+    } catch (error) {
+      console.error('Error deleting violation:', error);
+      setError('Erreur lors de la suppression de l\'infraction');
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   if (!authState.currentUser?.isParent) {
     return (
@@ -222,21 +244,36 @@ const ViolationForm: React.FC = () => {
             />
           </LocalizationProvider>
           
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-            <Button 
-              variant="outlined" 
-              onClick={() => navigate('/')}
-            >
-              Annuler
-            </Button>
-            <Button 
-              type="submit" 
-              variant="contained" 
-              color="primary"
-              disabled={loading}
-            >
-              {isEditing ? 'Mettre à jour' : 'Créer'}
-            </Button>
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {isEditing && (
+                <Button 
+                  variant="outlined" 
+                  color="error"
+                  onClick={handleDelete}
+                  disabled={loading}
+                >
+                  Supprimer
+                </Button>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button 
+                variant="outlined" 
+                onClick={() => navigate('/')}
+                disabled={loading}
+              >
+                Annuler
+              </Button>
+              <Button 
+                type="submit" 
+                variant="contained" 
+                color="primary"
+                disabled={loading}
+              >
+                {isEditing ? 'Mettre à jour' : 'Créer'}
+              </Button>
+            </Box>
           </Box>
         </form>
       </Paper>
