@@ -133,7 +133,6 @@ const ViolationForm: React.FC = () => {
       setLoading(false);
     }
   };
-\
   const handleDelete = async () => {
     if (!violationId) return;
 
