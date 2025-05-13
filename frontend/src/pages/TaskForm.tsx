@@ -143,6 +143,28 @@ const TaskForm: React.FC = () => {
       setLoading(false);
     }
   };
+\
+  const handleDelete = async () => {
+    if (!taskId) return;
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await taskService.deleteTask(taskId);
+      setSuccess('Tâche supprimée avec succès');
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      setError('Erreur lors de la suppression de la tâche');
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const handleAssignedToChange = (event: SelectChangeEvent<string[]>) => {
     const value = event.target.value;
@@ -272,21 +294,36 @@ const TaskForm: React.FC = () => {
             />
           </LocalizationProvider>
           
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-            <Button 
-              variant="outlined" 
-              onClick={() => navigate('/')}
-            >
-              Annuler
-            </Button>
-            <Button 
-              type="submit" 
-              variant="contained" 
-              color="primary"
-              disabled={loading}
-            >
-              {isEditing ? 'Mettre à jour' : 'Créer'}
-            </Button>
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              {isEditing && (
+                <Button 
+                  variant="outlined" 
+                  color="error"
+                  onClick={handleDelete}
+                  disabled={loading}
+                >
+                  Supprimer
+                </Button>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button 
+                variant="outlined" 
+                onClick={() => navigate('/')}
+                disabled={loading} // Also disable cancel when loading
+              >
+                Annuler
+              </Button>
+              <Button 
+                type="submit" 
+                variant="contained" 
+                color="primary"
+                disabled={loading}
+              >
+                {isEditing ? 'Mettre à jour' : 'Créer'}
+              </Button>
+            </Box>
           </Box>
         </form>
       </Paper>
