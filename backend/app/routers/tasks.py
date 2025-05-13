@@ -270,11 +270,68 @@ async def complete_task(task_id: UUID, current_user: User = Depends(get_current_
             logger.warning(f"Unauthorized complete attempt on task {task_id} by user {current_user.id}")
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
         
-        task.completed = True
+        task_to_finalize_and_return = None
+
+        if task.is_recurring and task.parent_task_id is None: 
+            target_due_date = task.due_date
+            logger.info(f"Complete task called on parent recurring task {task.id} (title: '{task.title}'). Target due date for instance: {target_due_date}.")
+
+            instance_stmt = select(Task).where(
+                Task.parent_task_id == task.id,
+                Task.due_date == target_due_date
+            )
+            existing_instance_result = await db.execute(instance_stmt)
+            instance_to_modify = existing_instance_result.scalar_one_or_none()
+
+            if instance_to_modify:
+                if instance_to_modify.completed:
+                    logger.info(f"Instance {instance_to_modify.id} for parent {task.id} on {target_due_date} is already completed.")
+                else:
+                    logger.info(f"Completing existing instance {instance_to_modify.id} for parent {task.id} on {target_due_date}.")
+                    instance_to_modify.completed = True
+                task_to_finalize_and_return = instance_to_modify
+            else:
+                logger.info(f"No instance found for parent {task.id} on {target_due_date}. Creating and completing a new instance.")
+                new_instance = Task(
+                    title=task.title,
+                    description=task.description,
+                    due_date=target_due_date,
+                    created_by=task.created_by,
+                    parent_task_id=task.id,
+                    is_recurring=False,
+                    completed=True, # Mark as completed
+                    weekdays=None 
+                )
+                db.add(new_instance)
+                await db.flush() 
+
+                parent_assignment_stmt = select(task_assignments.c.user_id).where(task_assignments.c.task_id == task.id)
+                parent_assigned_users = await db.execute(parent_assignment_stmt)
+                for user_id_row in parent_assigned_users:
+                    await db.execute(
+                        task_assignments.insert().values(
+                            task_id=new_instance.id,
+                            user_id=user_id_row[0]
+                        )
+                    )
+                task_to_finalize_and_return = new_instance
+        else:
+            # It's a non-recurring task or an existing instance.
+            if task.completed:
+                logger.info(f"Task {task.id} (non-recurring/instance) is already completed.")
+            else:
+                task.completed = True # Mark the original task (instance or non-recurring) as complete
+            task_to_finalize_and_return = task 
+
+        if not task_to_finalize_and_return:
+             logger.critical(f"Logic error: task_to_finalize_and_return is None for task_id {task.id}. This path should not be reachable. Rolling back.")
+             await db.rollback()
+             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error during task completion.")
+
         await db.commit()
-        await db.refresh(task)
-        logger.info(f"Task {task_id} marked as completed by user {current_user.id}")
-        return await serialize_task(task, db)
+        await db.refresh(task_to_finalize_and_return)
+        logger.info(f"Task {task_to_finalize_and_return.id} marked as completed (or instance handled) by user {current_user.id}. Final state: completed={task_to_finalize_and_return.completed}")
+        return await serialize_task(task_to_finalize_and_return, db)
     except Exception as e:
         logger.error(f"Failed to mark task {task_id} as complete: {e}", exc_info=True)
         await db.rollback()
