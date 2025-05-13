@@ -23,14 +23,5 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
-    # Champs pour la récurrence
-    is_recurring = Column(Boolean, default=False, nullable=False)
-    # Stocke les jours de la semaine (1-7 pour lundi-dimanche)
-    weekdays = Column(ARRAY(Integer), nullable=True)
-    # ID de la tâche parente si c'est une instance d'une tâche récurrente
-    parent_task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=True)
-
     assigned_to = relationship("User", secondary=task_assignments, back_populates="assigned_tasks")
     creator = relationship("User", foreign_keys=[created_by])
-    # Relation avec les instances de tâches récurrentes
-    recurring_instances = relationship("Task", backref="parent_task", remote_side=[id])

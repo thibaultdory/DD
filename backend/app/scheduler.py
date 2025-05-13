@@ -1,51 +1,73 @@
 from datetime import date, timedelta
-from sqlalchemy import select
+from sqlalchemy import select, or_
+from sqlalchemy.dialects.postgresql import insert # For on_conflict_do_nothing
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.task import Task
-from app.core.database import get_db
+from dateutil.rrule import rrulestr # Make sure this is installed
 
-async def create_recurring_task_instances():
-    """
-    Crée les instances des tâches récurrentes pour la semaine suivante.
-    Cette fonction doit être exécutée une fois par jour.
-    """
-    async for db in get_db():
-        # Sélectionne toutes les tâches récurrentes
-        stmt = select(Task).where(Task.is_recurring == True)
-        result = await db.execute(stmt)
-        recurring_tasks = result.scalars().all()
+from app.models.task_series import TaskSeries, TaskOccurrence
+# from app.core.database import get_db # Assuming db session is passed directly
 
-        # Pour chaque tâche récurrente
-        for task in recurring_tasks:
-            # Calcule les dates pour la semaine suivante
-            today = date.today()
-            start_of_next_week = today + timedelta(days=(7 - today.weekday()))
-            
-            # Pour chaque jour configuré dans la tâche
-            for weekday in task.weekdays:
-                # Calcule la date pour ce jour de la semaine
-                task_date = start_of_next_week + timedelta(days=weekday-1)
-                
-                # Vérifie si une instance existe déjà pour cette date
-                stmt = select(Task).where(
-                    Task.parent_task_id == task.id,
-                    Task.due_date == task_date
-                )
-                result = await db.execute(stmt)
-                existing_instance = result.scalar_one_or_none()
-                
-                # Si aucune instance n'existe, en crée une nouvelle
-                if not existing_instance:
-                    new_instance = Task(
-                        title=task.title,
-                        description=task.description,
-                        due_date=task_date,
-                        created_by=task.created_by,
-                        parent_task_id=task.id,
-                        is_recurring=False  # L'instance n'est pas elle-même récurrente
-                    )
-                    # Copie les assignations
-                    new_instance.assigned_to = task.assigned_to
-                    db.add(new_instance)
+GEN_WINDOW = 30  # days ahead
+
+async def materialise_occurrences(db: AsyncSession):
+    today = date.today()
+    horizon = today + timedelta(days=GEN_WINDOW)
+
+    # fetch active series
+    result = await db.execute(
+        select(TaskSeries).where(
+            or_(TaskSeries.until_date.is_(None),
+                TaskSeries.until_date >= today)
+        )
+    )
+    series_list = result.scalars().all()
+
+    for s in series_list:
+        # Ensure dtstart is correctly handled by rrulestr
+        # If s.start_date is already a date object, it should be fine.
+        # If rrule string already contains DTSTART, rrulestr might use that.
+        # It's safer if the rrule string itself defines DTSTART if it's critical.
+        # For this implementation, we assume s.start_date is the authoritative start.
+        rule = rrulestr(s.rrule, dtstart=s.start_date)
         
-        await db.commit()
+        # Filter occurrences within the [today, horizon] window
+        # The plan uses rule.between(today, horizon, inc=True)
+        # Ensure that 'today' considers the task's start_date.
+        # If a task starts in the future but within the horizon, it should be generated.
+        # If a task started in the past, generate from 'today' onwards.
+        
+        effective_start_date_for_generation = max(today, s.start_date)
+
+        for due_datetime_obj in rule.between(effective_start_date_for_generation, horizon, inc=True):
+            due_date_obj = due_datetime_obj.date() # Convert datetime to date
+            # upsert keeps generator idempotent
+            stmt = insert(TaskOccurrence).values(
+                series_id=s.id,
+                due_date=due_date_obj
+            ).on_conflict_do_nothing(
+                index_elements=['series_id', 'due_date'] # Specify conflict target
+            )
+            await db.execute(stmt)
+
+    await db.commit()
+
+# Example of how this might be called by a scheduler (e.g., APScheduler)
+# This part would be in main.py or where the scheduler is configured.
+# from apscheduler.schedulers.asyncio import AsyncIOScheduler
+# from app.core.database import SessionLocal # Assuming SessionLocal for creating sessions
+
+# async def scheduled_materialise_occurrences():
+#     async with SessionLocal() as db:
+#         await materialise_occurrences(db)
+
+# def setup_scheduler():
+#     scheduler = AsyncIOScheduler()
+#     # Run nightly at midnight
+#     scheduler.add_job(scheduled_materialise_occurrences, 'cron', hour=0, minute=0)
+#     # Run also at startup (optional, or if you want immediate generation)
+#     # scheduler.add_job(scheduled_materialise_occurrences) 
+#     scheduler.start()
+#     return scheduler
+
+# The plan also mentions: "Run it right after any change to a series (create/update)."
+# This means materialise_occurrences(db) will need to be callable from the CRUD operations for TaskSeries.

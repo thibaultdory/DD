@@ -11,11 +11,12 @@ from app.core.database import init_db
 from app.core.initial_data import seed_initial_data
 from app.core.jobs import process_daily_rewards
 from app.core.logging_config import setup_logging  # Import setup_logging
-from app.scheduler import create_recurring_task_instances
+from app.scheduler import materialise_occurrences # Updated from create_recurring_task_instances
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router
 from app.routers.tasks import router as tasks_router
+from app.routers.task_series import router as task_series_router # Added
 from app.routers.privileges import router as privileges_router
 from app.routers.rule_violations import router as rule_violations_router
 from app.routers.contracts import router as contracts_router
@@ -50,6 +51,7 @@ def get_csrf_config():
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(users_router, prefix="/api", tags=["users"])
 app.include_router(tasks_router, prefix="/api", tags=["tasks"])
+app.include_router(task_series_router, prefix="/api", tags=["task-series"]) # Added
 app.include_router(privileges_router, prefix="/api", tags=["privileges"])
 app.include_router(rule_violations_router, prefix="/api", tags=["rule-violations"])
 app.include_router(contracts_router, prefix="/api", tags=["contracts"])
@@ -67,7 +69,15 @@ async def startup():
     # Schedule daily rewards and recurring tasks at midnight
     scheduler = AsyncIOScheduler()
     scheduler.add_job(process_daily_rewards, 'cron', hour=0, minute=0)
-    scheduler.add_job(create_recurring_task_instances, 'cron', hour=0, minute=0)
+    # scheduler.add_job(create_recurring_task_instances, 'cron', hour=0, minute=0) # Old job
+    
+    # New job for materializing occurrences
+    # Need to wrap materialise_occurrences to provide a db session
+    from app.core.database import SessionLocal # Import SessionLocal
+    async def scheduled_materialise_occurrences():
+        async with SessionLocal() as db:
+            await materialise_occurrences(db)
+    scheduler.add_job(scheduled_materialise_occurrences, 'cron', hour=0, minute=1) # Run at 00:01
     scheduler.start()
 
 @app.get("/")

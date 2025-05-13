@@ -13,5 +13,6 @@ class User(Base):
     name = Column(String, nullable=False)
     birth_date = Column(Date, nullable=False)
     assigned_tasks = relationship("Task", secondary=task_assignments, back_populates="assigned_to")
+    assigned_task_series = relationship("TaskSeries", secondary="task_series_assignees", back_populates="assignees")
     is_parent = Column(Boolean, nullable=False)
     profile_picture = Column(String, nullable=True)
