@@ -243,6 +243,25 @@ export const taskService = {
     return response.data;
   },
 
+
+  // Marquer une tâche comme non terminée
+  async uncompleteTask(taskId: string): Promise<Task> {
+    if (USE_MOCK_DATA) {
+      const index = mockTasks.findIndex(t => t.id === taskId);
+      if (index !== -1) {
+        mockTasks[index].completed = false;
+        notifyChange('tasks');
+        return mockTasks[index];
+      }
+      throw new Error('Task not found');
+    }
+    
+    // Utiliser updateTask pour marquer comme non terminée
+    const response = await api.put(`/tasks/${taskId}`, { completed: false });
+    notifyChange('tasks');
+    return response.data;
+  },
+
   // Supprimer une tâche (parents uniquement)
   async deleteTask(taskId: string): Promise<void> {
     if (USE_MOCK_DATA) {

@@ -28,9 +28,10 @@ import {
   EmojiEvents, 
   Warning,
   Info,
-  Check
+  Check,
+  Undo
 } from '@mui/icons-material';
-import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
+import { format, startOfWeek, addDays, isSameDay, parseISO, isPast, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, Privilege, RuleViolation, Rule } from '../types';
@@ -199,12 +200,16 @@ const Calendar: React.FC = () => {
     setSelectedChild(childId);
   };
 
-  const handleCompleteTask = async (taskId: string) => {
+  const handleToggleTaskComplete = async (task: Task) => {
     try {
-      await taskService.completeTask(taskId);
+      if (task.completed) {
+        await taskService.uncompleteTask(task.id);
+      } else {
+        await taskService.completeTask(task.id);
+      }
       // La mise à jour des tâches sera gérée par l'abonnement
     } catch (error) {
-      console.error('Error completing task:', error);
+      console.error('Error toggling task completion:', error);
     }
   };
 
@@ -375,14 +380,26 @@ const Calendar: React.FC = () => {
                                     <Info fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                                {!task.completed && (
-                                  <Tooltip title="Marquer comme terminé">
+                                {task.completed ? (
+                                  <Tooltip title="Marquer comme non terminé">
                                     <IconButton 
                                       size="small" 
-                                      onClick={() => handleCompleteTask(task.id)}
+                                      onClick={() => handleToggleTaskComplete(task)}
                                     >
-                                      <Check fontSize="small" />
+                                      <Undo fontSize="small" />
                                     </IconButton>
+                                  </Tooltip>
+                                ) : (
+                                  <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                                    <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                                      <IconButton 
+                                        size="small" 
+                                        onClick={() => handleToggleTaskComplete(task)}
+                                        disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                                      >
+                                        <Check fontSize="small" />
+                                      </IconButton>
+                                    </span>
                                   </Tooltip>
                                 )}
                               </Box>
@@ -566,15 +583,16 @@ const Calendar: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDetails}>Fermer</Button>
-          {selectedItemType === 'task' && !selectedItem.completed && (
+          {selectedItemType === 'task' && selectedItem && (
             <Button 
               onClick={() => {
-                handleCompleteTask(selectedItem.id);
+                handleToggleTaskComplete(selectedItem as Task);
                 handleCloseDetails();
               }}
               color="primary"
+              disabled={!selectedItem.completed && !(isPast(parseISO(selectedItem.dueDate)) || isToday(parseISO(selectedItem.dueDate)))}
             >
-              Marquer comme terminé
+              {selectedItem.completed ? "Marquer comme non terminé" : "Marquer comme terminé"}
             </Button>
           )}
         </DialogActions>

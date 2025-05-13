@@ -25,8 +25,10 @@ import {
   Assignment, 
   EmojiEvents, 
   Warning,
-  Check
+  Check,
+  Undo
 } from '@mui/icons-material';
+import { parseISO, isPast, isToday } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Task, Privilege, RuleViolation, Rule } from '../types';
@@ -235,12 +237,16 @@ const Home: React.FC = () => {
     };
   }, [authState.currentUser, selectedChild, page]);
 
-  const handleCompleteTask = async (taskId: string) => {
+  const handleToggleTaskComplete = async (task: Task) => {
     try {
-      await taskService.completeTask(taskId);
+      if (task.completed) {
+        await taskService.uncompleteTask(task.id);
+      } else {
+        await taskService.completeTask(task.id);
+      }
       // La mise à jour des tâches sera gérée par l'abonnement
     } catch (error) {
-      console.error('Error completing task:', error);
+      console.error('Error toggling task completion:', error);
     }
   };
 
@@ -351,15 +357,28 @@ const Home: React.FC = () => {
                 <React.Fragment key={task.id}>
                   <ListItem
                     secondaryAction={
-                      !task.completed && (
-                        <Tooltip title="Marquer comme terminé">
+                      task.completed ? (
+                        <Tooltip title="Marquer comme non terminé">
                           <IconButton
                             edge="end"
-                            aria-label="complete"
-                            onClick={() => handleCompleteTask(task.id)}
+                            aria-label="uncomplete"
+                            onClick={() => handleToggleTaskComplete(task)}
                           >
-                            <Check />
+                            <Undo />
                           </IconButton>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                          <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                            <IconButton
+                              edge="end"
+                              aria-label="complete"
+                              onClick={() => handleToggleTaskComplete(task)}
+                              disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                            >
+                              <Check />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       )
                     }
