@@ -143,7 +143,7 @@ const TaskForm: React.FC = () => {
       setLoading(false);
     }
   };
-\
+
   const handleDelete = async () => {
     if (!taskId) return;
 
