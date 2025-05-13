@@ -27,7 +27,8 @@ import {
   Warning,
   Check,
   Undo,
-  Edit // Add Edit icon
+  Edit, // Add Edit icon
+  Delete // Add Delete icon
 } from '@mui/icons-material';
 import { parseISO, isPast, isToday } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
@@ -251,6 +252,21 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleDeleteTaskInstance = async (taskId: string) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette instance de tâche ?")) {
+      return;
+    }
+    try {
+      await taskService.deleteTaskInstance(taskId);
+      // La mise à jour des tâches sera gérée par l'abonnement
+      // console.log('Task instance deleted successfully');
+    } catch (error) {
+      console.error('Error deleting task instance:', error);
+      // Afficher une notification d'erreur à l'utilisateur
+    }
+  };
+
+
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
     setPage(1); // Réinitialiser la page lors du changement d'onglet
@@ -367,6 +383,17 @@ const Home: React.FC = () => {
                               onClick={() => navigate(`/tasks/edit/${task.id}`)}
                             >
                               <Edit />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {authState.currentUser?.isParent && (task.parentTaskId || !task.isRecurring) && (
+                          <Tooltip title="Supprimer cette instance">
+                            <IconButton
+                              edge="end"
+                              aria-label="delete-instance"
+                              onClick={() => handleDeleteTaskInstance(task.id)}
+                            >
+                              <Delete />
                             </IconButton>
                           </Tooltip>
                         )}

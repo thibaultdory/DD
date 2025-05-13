@@ -30,7 +30,8 @@ import {
   Info,
   Check,
   Undo,
-  Edit // Add Edit icon
+  Edit, // Add Edit icon
+  Delete // Add Delete icon
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, isSameDay, parseISO, isPast, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -216,6 +217,23 @@ const Calendar: React.FC = () => {
     }
   };
 
+  const handleDeleteTaskInstance = async (taskId: string, event?: React.MouseEvent) => {
+    if (event) event.stopPropagation(); // Prevent dialog from opening
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette instance de tâche ?")) {
+      return;
+    }
+    try {
+      await taskService.deleteTaskInstance(taskId);
+      // La mise à jour des tâches sera gérée par l'abonnement
+      // console.log('Task instance deleted successfully');
+      setDetailsOpen(false); // Close dialog if open from a delete action within it (though not planned for now)
+    } catch (error) {
+      console.error('Error deleting task instance:', error);
+      // Afficher une notification d'erreur à l'utilisateur
+    }
+  };
+
+
   const handleItemClick = (item: any, type: 'task' | 'privilege' | 'violation') => {
     setSelectedItem(item);
     setSelectedItemType(type);
@@ -375,6 +393,16 @@ const Calendar: React.FC = () => {
                                       onClick={() => navigate(`/tasks/edit/${task.id}`)}
                                     >
                                       <Edit fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                                {authState.currentUser?.isParent && (task.parentTaskId || !task.isRecurring) && (
+                                  <Tooltip title="Supprimer cette instance">
+                                    <IconButton
+                                      size="small"
+                                      onClick={(e) => handleDeleteTaskInstance(task.id, e)}
+                                    >
+                                      <Delete fontSize="small" />
                                     </IconButton>
                                   </Tooltip>
                                 )}

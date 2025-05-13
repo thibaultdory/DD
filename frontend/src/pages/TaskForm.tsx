@@ -152,7 +152,7 @@ const TaskForm: React.FC = () => {
     setSuccess(null);
 
     try {
-      await taskService.deleteTask(taskId);
+      await taskService.deleteTask(taskId, true);
       setSuccess('Tâche supprimée avec succès');
       setTimeout(() => {
         navigate('/');

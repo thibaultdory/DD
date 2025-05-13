@@ -263,10 +263,11 @@ export const taskService = {
   },
 
   // Supprimer une tâche (parents uniquement)
-  async deleteTask(taskId: string): Promise<void> {
+  async deleteTask(taskId: string, deleteFuture: boolean = false): Promise<void> {
     if (USE_MOCK_DATA) {
       const index = mockTasks.findIndex(t => t.id === taskId);
       if (index !== -1) {
+        // Mock data logic might need adjustment if we want to simulate deleteFuture
         mockTasks.splice(index, 1);
         notifyChange('tasks');
         return;
@@ -274,8 +275,29 @@ export const taskService = {
       throw new Error('Task not found');
     }
     
-    await api.delete(`/tasks/${taskId}`);
+    await api.delete(`/tasks/${taskId}`, { params: { delete_future: deleteFuture } });
+    notifyChange('tasks'); // Notify after successful deletion
   }
+
+  // Supprimer une instance de tâche (parents uniquement)
+  async deleteTaskInstance(taskId: string): Promise<void> {
+    if (USE_MOCK_DATA) {
+      // This mock logic might need to be more sophisticated 
+      // if there's a difference between deleting a task series and an instance in mock data.
+      const index = mockTasks.findIndex(t => t.id === taskId);
+      if (index !== -1) {
+        mockTasks.splice(index, 1);
+        notifyChange('tasks');
+        return;
+      }
+      throw new Error('Task instance not found');
+    }
+    
+    // The backend handles deleting a single instance if parent_task_id is present
+    // and delete_future is false (which is the default)
+    await api.delete(`/tasks/${taskId}`);
+    notifyChange('tasks');
+  },
 };
 
 // Service de gestion des privilèges
