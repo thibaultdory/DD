@@ -88,15 +88,19 @@ const Calendar: React.FC = () => {
         try {
           let tasksResponse;
           if (viewMode === 'personal') {
+            // Use calendar endpoint to get all tasks, then filter on frontend
+            tasksResponse = await taskService.getTasksForCalendar();
+            // Filter tasks for the selected user in personal view
             const userId = authState.currentUser.isParent && selectedChild 
               ? selectedChild 
               : authState.currentUser.id;
-            tasksResponse = await taskService.getUserTasks(userId);
+            fetchedTasks = Array.isArray(tasksResponse) ? 
+              tasksResponse.filter(task => task.assignedTo.includes(userId)) : [];
           } else {
             // Use calendar endpoint for family view to get all tasks with permissions
             tasksResponse = await taskService.getTasksForCalendar();
+            fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : [];
           }
-          fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
         } catch (err) {
           console.error('Error fetching tasks:', err);
         }
@@ -149,12 +153,14 @@ const Calendar: React.FC = () => {
     const unsubscribeTasks = taskService.subscribe(() => {
       if (authState.currentUser) {
         if (viewMode === 'personal') {
-          const userId = authState.currentUser.isParent && selectedChild 
-            ? selectedChild 
-            : authState.currentUser.id;
-          taskService.getUserTasks(userId).then(response => {
-            const tasks = Array.isArray(response) ? response : (response.tasks || []);
-            setTasks(tasks);
+          // Use calendar endpoint and filter on frontend for personal view
+          taskService.getTasksForCalendar().then(response => {
+            const allTasks = Array.isArray(response) ? response : [];
+            const userId = authState.currentUser.isParent && selectedChild 
+              ? selectedChild 
+              : authState.currentUser.id;
+            const filteredTasks = allTasks.filter(task => task.assignedTo.includes(userId));
+            setTasks(filteredTasks);
           });
         } else {
           // Use calendar endpoint for family view
