@@ -863,7 +863,13 @@ const Calendar: React.FC = () => {
           height: 'calc(100vh - 280px)', // Adjust based on header and controls height
           overflowY: 'auto',
           overflowX: 'hidden',
-          px: 1
+          px: 1,
+          // Hide scrollbar while maintaining scroll functionality
+          '&::-webkit-scrollbar': {
+            display: 'none',
+          },
+          '-ms-overflow-style': 'none',  // IE and Edge
+          'scrollbar-width': 'none',     // Firefox
         }}
       >
         {daysToDisplay.map((day, index) => {
