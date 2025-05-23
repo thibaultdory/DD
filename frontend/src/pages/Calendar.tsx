@@ -346,10 +346,19 @@ const Calendar: React.FC = () => {
           height: calendarView === 'week' ? '200px' : '150px', 
           verticalAlign: 'top',
           opacity: isCurrentMonth ? 1 : 0.3,
-          border: isToday(day) ? '2px solid #1976d2' : undefined
+          border: isToday(day) ? '2px solid #1976d2' : undefined,
+          width: '14.28%',
+          maxWidth: 0, // Force table-layout: fixed to work
+          overflow: 'hidden',
+          padding: '4px'
         }}
       >
-        <Box sx={{ minHeight: '100%', p: 1 }}>
+        <Box sx={{ 
+          minHeight: '100%', 
+          p: 0.5,
+          overflow: 'hidden',
+          width: '100%'
+        }}>
           {/* Date header for month view */}
           {calendarView === 'month' && (
             <Typography 
@@ -406,9 +415,19 @@ const Calendar: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     {viewMode === 'family' && calendarView === 'week' && (
                       <Chip 
-                        label={getUserName(task.assignedTo[0])} 
+                        label={getUserName(task.assignedTo[0]).length > 8 
+                          ? `${getUserName(task.assignedTo[0]).substring(0, 8)}...`
+                          : getUserName(task.assignedTo[0])
+                        } 
                         size="small" 
-                        sx={{ mr: 0.5 }}
+                        sx={{ 
+                          mr: 0.5, 
+                          maxWidth: '80px',
+                          '& .MuiChip-label': {
+                            fontSize: '0.7rem',
+                            padding: '0 6px'
+                          }
+                        }}
                       />
                     )}
                     <Tooltip title="Voir détails">
@@ -513,9 +532,19 @@ const Calendar: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     {viewMode === 'family' && calendarView === 'week' && (
                       <Chip 
-                        label={getUserName(privilege.assignedTo)} 
+                        label={getUserName(privilege.assignedTo).length > 8 
+                          ? `${getUserName(privilege.assignedTo).substring(0, 8)}...`
+                          : getUserName(privilege.assignedTo)
+                        } 
                         size="small" 
-                        sx={{ mr: 0.5 }}
+                        sx={{ 
+                          mr: 0.5, 
+                          maxWidth: '80px',
+                          '& .MuiChip-label': {
+                            fontSize: '0.7rem',
+                            padding: '0 6px'
+                          }
+                        }}
                       />
                     )}
                     <Tooltip title="Voir détails">
@@ -565,9 +594,19 @@ const Calendar: React.FC = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     {viewMode === 'family' && calendarView === 'week' && (
                       <Chip 
-                        label={getUserName(violation.childId)} 
+                        label={getUserName(violation.childId).length > 8 
+                          ? `${getUserName(violation.childId).substring(0, 8)}...`
+                          : getUserName(violation.childId)
+                        } 
                         size="small" 
-                        sx={{ mr: 0.5 }}
+                        sx={{ 
+                          mr: 0.5, 
+                          maxWidth: '80px',
+                          '& .MuiChip-label': {
+                            fontSize: '0.7rem',
+                            padding: '0 6px'
+                          }
+                        }}
                       />
                     )}
                     <Tooltip title="Voir détails">
@@ -626,7 +665,7 @@ const Calendar: React.FC = () => {
         </Typography>
         
         {/* Navigation Controls */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 1 }}>
           <IconButton 
             onClick={handlePreviousPeriod}
             disabled={dataLoading}
@@ -635,8 +674,15 @@ const Calendar: React.FC = () => {
             <ChevronLeft />
           </IconButton>
           
-          <Box sx={{ display: 'flex', alignItems: 'center', mx: 3 }}>
-            <Typography variant="h6" sx={{ minWidth: '200px', textAlign: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                minWidth: { xs: 'auto', sm: '200px' }, 
+                textAlign: 'center',
+                fontSize: { xs: '1rem', sm: '1.25rem' }
+              }}
+            >
               {calendarView === 'week' 
                 ? `Semaine du ${format(daysToDisplay[0], 'd MMM', { locale: fr })} au ${format(daysToDisplay[daysToDisplay.length - 1], 'd MMM yyyy', { locale: fr })}`
                 : format(selectedDate, 'MMMM yyyy', { locale: fr })
@@ -649,7 +695,11 @@ const Calendar: React.FC = () => {
               variant="outlined"
               size="small"
               startIcon={<Today />}
-              sx={{ ml: 2 }}
+              sx={{ 
+                ml: { xs: 0, sm: 2 },
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                padding: { xs: '4px 8px', sm: '6px 16px' }
+              }}
             >
               {calendarView === 'week' ? 'Cette semaine' : 'Ce mois'}
             </Button>
@@ -739,13 +789,13 @@ const Calendar: React.FC = () => {
         </Box>
       )}
 
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} sx={{ overflowX: 'auto', maxWidth: '100%' }}>
+        <Table sx={{ minWidth: 'auto', tableLayout: 'fixed' }}>
           <TableHead>
             <TableRow>
               {/* Week view: show all days in header */}
               {calendarView === 'week' && daysToDisplay.map((day) => (
-                <TableCell key={day.toString()} align="center">
+                <TableCell key={day.toString()} align="center" sx={{ width: '14.28%' }}>
                   <Typography variant="subtitle1">
                     {format(day, 'EEEE', { locale: fr })}
                   </Typography>
@@ -757,7 +807,7 @@ const Calendar: React.FC = () => {
               
               {/* Month view: show day names only */}
               {calendarView === 'month' && ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((dayName) => (
-                <TableCell key={dayName} align="center">
+                <TableCell key={dayName} align="center" sx={{ width: '14.28%' }}>
                   <Typography variant="subtitle1">
                     {dayName}
                   </Typography>
