@@ -200,6 +200,7 @@ export const taskService = {
     }
     
     const response = await api.post('/tasks', task);
+    notifyChange('tasks');
     return response.data;
   },
 
