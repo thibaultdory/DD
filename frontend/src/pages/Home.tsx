@@ -157,6 +157,22 @@ const Home: React.FC = () => {
       // Check if taskDate is on or after rangeStart AND on or before rangeEnd
       const isAfterOrOnStart = taskDate.getTime() >= rangeStart.getTime();
       const isBeforeOrOnEnd = taskDate.getTime() <= rangeEnd.getTime();
+
+      // Detailed logging for tasks
+      if (true) { // Easy to toggle logging
+        console.log('[TimelineDebug] Task Check:', {
+          id: task.id,
+          title: task.title,
+          originalDueDate: task.dueDate,
+          parsedTaskDate: parseISO(task.dueDate).toISOString(),
+          normalizedTaskDate: taskDate.toISOString(),
+          rangeStart: rangeStart.toISOString(),
+          rangeEnd: rangeEnd.toISOString(),
+          isAfterOrOnStart,
+          isBeforeOrOnEnd,
+          isInRange: isAfterOrOnStart && isBeforeOrOnEnd
+        });
+      }
       return isAfterOrOnStart && isBeforeOrOnEnd;
     });
     
