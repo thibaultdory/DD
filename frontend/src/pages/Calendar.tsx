@@ -53,7 +53,7 @@ const Calendar: React.FC = () => {
     rules, 
     initialLoading, 
     dataLoading,
-    getUserTasks
+    getCalendarTasks
   } = useDataCache();
   
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -98,7 +98,7 @@ const Calendar: React.FC = () => {
         : authState.currentUser.id;
       
       // Use cached data for tasks
-      const userTasks = getUserTasks(userId);
+      const userTasks = getCalendarTasks(userId);
       setTasks(userTasks);
       
       // Filter privileges and violations for the user
@@ -120,7 +120,7 @@ const Calendar: React.FC = () => {
     viewMode, 
     selectedChild, 
     initialLoading,
-    getUserTasks
+    getCalendarTasks
   ]);
 
   const handleViewModeChange = (

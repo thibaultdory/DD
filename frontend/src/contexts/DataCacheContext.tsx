@@ -4,7 +4,7 @@ import { taskService, privilegeService, ruleViolationService, ruleService } from
 import { useAuth } from './AuthContext';
 
 interface DataCache {
-  // Family-wide data (all tasks, privileges, violations with permissions)
+  // Family-wide data (all tasks, privileges, violations with permissions) - only for calendar view
   familyTasks: Task[] | null;
   familyPrivileges: Privilege[] | null;
   familyViolations: RuleViolation[] | null;
@@ -18,15 +18,18 @@ interface DataCache {
   refreshFamilyData: () => Promise<void>;
   refreshUserData: (userId: string) => Promise<void>;
   
-  // Filtered data getters
-  getUserTasks: (userId: string) => Task[];
+  // Paginated data getters - these now use backend pagination
+  getUserTasks: (userId: string, page?: number, limit?: number) => Promise<{ tasks: Task[], total: number }>;
   getUserPrivileges: (userId: string, page?: number, limit?: number) => Promise<{ privileges: Privilege[], total: number }>;
   getUserViolations: (userId: string, page?: number, limit?: number) => Promise<{ violations: RuleViolation[], total: number }>;
   
   // Paginated data getters for home view
-  getAllTasks: (page?: number, limit?: number) => { tasks: Task[], total: number };
+  getAllTasks: (page?: number, limit?: number) => Promise<{ tasks: Task[], total: number }>;
   getAllPrivileges: (page?: number, limit?: number) => Promise<{ privileges: Privilege[], total: number }>;
   getAllViolations: (page?: number, limit?: number) => Promise<{ violations: RuleViolation[], total: number }>;
+  
+  // Calendar-specific getters that return all data filtered by user
+  getCalendarTasks: (userId?: string) => Task[];
 }
 
 const DataCacheContext = createContext<DataCache | undefined>(undefined);
@@ -91,6 +94,36 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     }
   }, [authState.currentUser]);
 
+  // Subscribe to data changes from API services
+  useEffect(() => {
+    if (!authState.currentUser) return;
+
+    // Subscribe to task changes
+    const unsubscribeTasks = taskService.subscribe(() => {
+      console.log('Task data changed, refreshing cache...');
+      refreshFamilyData();
+    });
+
+    // Subscribe to privilege changes
+    const unsubscribePrivileges = privilegeService.subscribe(() => {
+      console.log('Privilege data changed, refreshing cache...');
+      refreshFamilyData();
+    });
+
+    // Subscribe to violation changes
+    const unsubscribeViolations = ruleViolationService.subscribe(() => {
+      console.log('Violation data changed, refreshing cache...');
+      refreshFamilyData();
+    });
+
+    // Cleanup subscriptions on unmount or user change
+    return () => {
+      unsubscribeTasks();
+      unsubscribePrivileges();
+      unsubscribeViolations();
+    };
+  }, [authState.currentUser]);
+
   const refreshUserData = async (userId: string) => {
     setDataLoading(true);
     try {
@@ -107,9 +140,17 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     }
   };
 
-  const getUserTasks = (userId: string): Task[] => {
-    if (!familyTasks) return [];
-    return familyTasks.filter(task => task.assignedTo.includes(userId));
+  const getUserTasks = async (userId: string, page = 1, limit = 10) => {
+    try {
+      const response = await taskService.getUserTasks(userId, page, limit);
+      return {
+        tasks: Array.isArray(response) ? response : (response.tasks || []),
+        total: Array.isArray(response) ? response.length : (response.total || 0)
+      };
+    } catch (error) {
+      console.error('Error fetching user tasks:', error);
+      return { tasks: [], total: 0 };
+    }
   };
 
   const getUserPrivileges = async (userId: string, page = 1, limit = 10) => {
@@ -138,17 +179,17 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     }
   };
 
-  const getAllTasks = (page = 1, limit = 10) => {
-    if (!familyTasks) return { tasks: [], total: 0 };
-    
-    const start = (page - 1) * limit;
-    const end = start + limit;
-    const paginatedTasks = familyTasks.slice(start, end);
-    
-    return {
-      tasks: paginatedTasks,
-      total: familyTasks.length
-    };
+  const getAllTasks = async (page = 1, limit = 10) => {
+    try {
+      const response = await taskService.getTasks(page, limit);
+      return {
+        tasks: Array.isArray(response) ? response : (response.tasks || []),
+        total: Array.isArray(response) ? response.length : (response.total || 0)
+      };
+    } catch (error) {
+      console.error('Error fetching all tasks:', error);
+      return { tasks: [], total: 0 };
+    }
   };
 
   const getAllPrivileges = async (page = 1, limit = 10) => {
@@ -177,6 +218,11 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     }
   };
 
+  const getCalendarTasks = (userId?: string) => {
+    if (!familyTasks) return [];
+    return familyTasks.filter(task => task.assignedTo.includes(userId || ''));
+  };
+
   const contextValue: DataCache = {
     familyTasks,
     familyPrivileges,
@@ -191,7 +237,8 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     getUserViolations,
     getAllTasks,
     getAllPrivileges,
-    getAllViolations
+    getAllViolations,
+    getCalendarTasks
   };
 
   return (

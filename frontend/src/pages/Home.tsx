@@ -122,23 +122,19 @@ const Home: React.FC = () => {
         if (tabValue === 0) { // Tasks tab
           if (authState.currentUser.isParent && selectedChild) {
             // Parent viewing specific child's tasks
-            const userTasks = getUserTasks(selectedChild);
-            const start = (page - 1) * limit;
-            const end = start + limit;
-            tasksData = userTasks.slice(start, end);
-            tasksTotal = userTasks.length;
+            const result = await getUserTasks(selectedChild, page, limit);
+            tasksData = result.tasks;
+            tasksTotal = result.total;
           } else if (authState.currentUser.isParent && !selectedChild) {
             // Parent viewing all family tasks
-            const allTasksResult = getAllTasks(page, limit);
-            tasksData = allTasksResult.tasks;
-            tasksTotal = allTasksResult.total;
+            const result = await getAllTasks(page, limit);
+            tasksData = result.tasks;
+            tasksTotal = result.total;
           } else {
             // Child viewing their own tasks
-            const userTasks = getUserTasks(authState.currentUser.id);
-            const start = (page - 1) * limit;
-            const end = start + limit;
-            tasksData = userTasks.slice(start, end);
-            tasksTotal = userTasks.length;
+            const result = await getUserTasks(authState.currentUser.id, page, limit);
+            tasksData = result.tasks;
+            tasksTotal = result.total;
           }
         } else if (tabValue === 1) { // Privileges tab
           if (authState.currentUser.isParent && selectedChild) {
