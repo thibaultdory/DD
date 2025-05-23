@@ -19,7 +19,8 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Avatar
+  Avatar,
+  DialogContentText
 } from '@mui/material';
 import { 
   CheckCircle, 
@@ -29,10 +30,13 @@ import {
   Warning,
   Info,
   Check,
-  Undo
+  Undo,
+  Edit,
+  Delete
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, isSameDay, parseISO, isPast, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useDataCache } from '../contexts/DataCacheContext';
 import { Task, Privilege, RuleViolation } from '../types';
@@ -41,6 +45,7 @@ import Layout from '../components/Layout/Layout';
 
 const Calendar: React.FC = () => {
   const { authState } = useAuth();
+  const navigate = useNavigate();
   const { 
     familyTasks, 
     familyPrivileges, 
@@ -60,6 +65,8 @@ const Calendar: React.FC = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedItemType, setSelectedItemType] = useState<'task' | 'privilege' | 'violation' | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
@@ -150,6 +157,35 @@ const Calendar: React.FC = () => {
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
+  };
+
+  const handleEditTask = (task: Task) => {
+    navigate(`/tasks/edit/${task.id}`);
+  };
+
+  const handleDeleteTask = (task: Task) => {
+    setTaskToDelete(task);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete) return;
+
+    try {
+      // For recurring tasks, ask if they want to delete future instances
+      const deleteFuture = taskToDelete.isRecurring && !taskToDelete.parentTaskId;
+      await taskService.deleteTask(taskToDelete.id, deleteFuture);
+      setDeleteDialogOpen(false);
+      setTaskToDelete(null);
+      // Data will be updated via cache subscription
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const cancelDeleteTask = () => {
+    setDeleteDialogOpen(false);
+    setTaskToDelete(null);
   };
 
   const handleItemClick = (item: any, type: 'task' | 'privilege' | 'violation') => {
@@ -344,6 +380,29 @@ const Calendar: React.FC = () => {
                                     <Info fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
+                                
+                                {/* Edit and Delete buttons for parents who created the task */}
+                                {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                                  <>
+                                    <Tooltip title="Modifier la tâche">
+                                      <IconButton 
+                                        size="small" 
+                                        onClick={() => handleEditTask(task)}
+                                      >
+                                        <Edit fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Supprimer la tâche">
+                                      <IconButton 
+                                        size="small" 
+                                        onClick={() => handleDeleteTask(task)}
+                                      >
+                                        <Delete fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </>
+                                )}
+                                
                                 {/* Only show completion buttons if user can modify the task */}
                                 {task.canModify !== false && (
                                   <>
@@ -553,17 +612,86 @@ const Calendar: React.FC = () => {
         <DialogActions>
           <Button onClick={handleCloseDetails}>Fermer</Button>
           {selectedItemType === 'task' && selectedItem && (
-            <Button 
-              onClick={() => {
-                handleToggleTaskComplete(selectedItem as Task);
-                handleCloseDetails();
-              }}
-              color="primary"
-              disabled={!selectedItem.completed && !(isPast(parseISO(selectedItem.dueDate)) || isToday(parseISO(selectedItem.dueDate)))}
-            >
-              {selectedItem.completed ? "Marquer comme non terminé" : "Marquer comme terminé"}
-            </Button>
+            <>
+              {/* Edit and Delete buttons for parents who created the task */}
+              {authState.currentUser?.isParent && selectedItem.createdBy === authState.currentUser.id && (
+                <>
+                  <Button 
+                    onClick={() => {
+                      handleEditTask(selectedItem as Task);
+                      handleCloseDetails();
+                    }}
+                    color="primary"
+                    variant="outlined"
+                    startIcon={<Edit />}
+                  >
+                    Modifier
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      handleDeleteTask(selectedItem as Task);
+                      handleCloseDetails();
+                    }}
+                    color="error"
+                    variant="outlined"
+                    startIcon={<Delete />}
+                  >
+                    Supprimer
+                  </Button>
+                </>
+              )}
+              {/* Complete/Uncomplete button */}
+              <Button 
+                onClick={() => {
+                  handleToggleTaskComplete(selectedItem as Task);
+                  handleCloseDetails();
+                }}
+                color="primary"
+                disabled={!selectedItem.completed && !(isPast(parseISO(selectedItem.dueDate)) || isToday(parseISO(selectedItem.dueDate)))}
+              >
+                {selectedItem.completed ? "Marquer comme non terminé" : "Marquer comme terminé"}
+              </Button>
+            </>
           )}
+        </DialogActions>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDeleteTask}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Confirmer la suppression
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            {taskToDelete && (
+              <>
+                Êtes-vous sûr de vouloir supprimer la tâche "{taskToDelete.title}" ?
+                {taskToDelete.isRecurring && !taskToDelete.parentTaskId && (
+                  <><br /><br />
+                  <strong>Note :</strong> Cette tâche est récurrente. Sa suppression supprimera également toutes les instances futures de cette tâche.
+                  </>
+                )}
+                {taskToDelete.parentTaskId && (
+                  <><br /><br />
+                  <strong>Note :</strong> Ceci est une instance d'une tâche récurrente. Seule cette occurrence sera supprimée.
+                  </>
+                )}
+              </>
+            )}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDeleteTask}>
+            Annuler
+          </Button>
+          <Button onClick={confirmDeleteTask} color="error" variant="contained">
+            Supprimer
+          </Button>
         </DialogActions>
       </Dialog>
     </Layout>

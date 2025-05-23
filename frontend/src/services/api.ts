@@ -249,7 +249,7 @@ export const taskService = {
   },
 
   // Supprimer une tâche (parents uniquement)
-  async deleteTask(taskId: string): Promise<void> {
+  async deleteTask(taskId: string, deleteFuture: boolean = false): Promise<void> {
     if (USE_MOCK_DATA) {
       const index = mockTasks.findIndex(t => t.id === taskId);
       if (index !== -1) {
@@ -260,7 +260,10 @@ export const taskService = {
       throw new Error('Task not found');
     }
     
-    await api.delete(`/tasks/${taskId}`);
+    await api.delete(`/tasks/${taskId}`, {
+      params: { delete_future: deleteFuture }
+    });
+    notifyChange('tasks');
   },
 
   // Récupérer toutes les tâches pour la vue calendrier avec permissions

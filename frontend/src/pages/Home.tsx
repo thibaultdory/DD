@@ -16,7 +16,12 @@ import {
   Avatar,
   Tooltip,
   Divider,
-  Stack
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
 } from '@mui/material';
 import { 
   CheckCircle,
@@ -25,7 +30,9 @@ import {
   EmojiEvents,
   Warning,
   Undo,
-  Check 
+  Check,
+  Edit,
+  Delete
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -85,6 +92,8 @@ const Home: React.FC = () => {
   const [page, setPage] = useState(1);
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
   const limit = 5; // Nombre d'éléments par page
   const children = authState.family.filter(user => !user.isParent);
@@ -198,6 +207,35 @@ const Home: React.FC = () => {
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
+  };
+
+  const handleEditTask = (task: Task) => {
+    navigate(`/tasks/edit/${task.id}`);
+  };
+
+  const handleDeleteTask = (task: Task) => {
+    setTaskToDelete(task);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete) return;
+
+    try {
+      // For recurring tasks, ask if they want to delete future instances
+      const deleteFuture = taskToDelete.isRecurring && !taskToDelete.parentTaskId;
+      await taskService.deleteTask(taskToDelete.id, deleteFuture);
+      setDeleteDialogOpen(false);
+      setTaskToDelete(null);
+      // Data will be updated via cache subscription
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const cancelDeleteTask = () => {
+    setDeleteDialogOpen(false);
+    setTaskToDelete(null);
   };
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
@@ -337,30 +375,59 @@ const Home: React.FC = () => {
                 <React.Fragment key={task.id}>
                   <ListItem
                     secondaryAction={
-                      task.completed ? (
-                        <Tooltip title="Marquer comme non terminé">
-                          <IconButton
-                            edge="end"
-                            aria-label="uncomplete"
-                            onClick={() => handleToggleTaskComplete(task)}
-                          >
-                            <Undo />
-                          </IconButton>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
-                          <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {/* Edit and Delete buttons for parents */}
+                        {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                          <>
+                            <Tooltip title="Modifier la tâche">
+                              <IconButton
+                                edge="end"
+                                aria-label="edit"
+                                onClick={() => handleEditTask(task)}
+                                size="small"
+                              >
+                                <Edit />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Supprimer la tâche">
+                              <IconButton
+                                edge="end"
+                                aria-label="delete"
+                                onClick={() => handleDeleteTask(task)}
+                                size="small"
+                              >
+                                <Delete />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
+                        
+                        {/* Complete/Uncomplete button */}
+                        {task.completed ? (
+                          <Tooltip title="Marquer comme non terminé">
                             <IconButton
                               edge="end"
-                              aria-label="complete"
+                              aria-label="uncomplete"
                               onClick={() => handleToggleTaskComplete(task)}
-                              disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
                             >
-                              <Check />
+                              <Undo />
                             </IconButton>
-                          </span>
-                        </Tooltip>
-                      )
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                            <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                              <IconButton
+                                edge="end"
+                                aria-label="complete"
+                                onClick={() => handleToggleTaskComplete(task)}
+                                disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                              >
+                                <Check />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        )}
+                      </Box>
                     }
                   >
                     <ListItemIcon>
@@ -557,6 +624,45 @@ const Home: React.FC = () => {
           )}
         </Paper>
       </TabPanel>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDeleteTask}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <DialogTitle id="delete-dialog-title">
+          Confirmer la suppression
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="delete-dialog-description">
+            {taskToDelete && (
+              <>
+                Êtes-vous sûr de vouloir supprimer la tâche "{taskToDelete.title}" ?
+                {taskToDelete.isRecurring && !taskToDelete.parentTaskId && (
+                  <><br /><br />
+                  <strong>Note :</strong> Cette tâche est récurrente. Sa suppression supprimera également toutes les instances futures de cette tâche.
+                  </>
+                )}
+                {taskToDelete.parentTaskId && (
+                  <><br /><br />
+                  <strong>Note :</strong> Ceci est une instance d'une tâche récurrente. Seule cette occurrence sera supprimée.
+                  </>
+                )}
+              </>
+            )}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDeleteTask}>
+            Annuler
+          </Button>
+          <Button onClick={confirmDeleteTask} color="error" variant="contained">
+            Supprimer
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Layout>
   );
 };
