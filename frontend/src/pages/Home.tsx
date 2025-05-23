@@ -1,45 +1,39 @@
-import React, { useEffect, useState } from 'react';
-
-import { 
-  Typography, 
-  Paper, 
-  Box, 
-  Chip, 
-  Button, 
-  List, 
-  ListItem, 
-  ListItemText, 
-  ListItemIcon, 
-  Divider,
+import React, { useState, useEffect } from 'react';
+import {
+  Typography,
   Tabs,
   Tab,
-  Pagination,
-  Stack,
-  Avatar,
+  Box,
+  Paper,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
   IconButton,
-  Tooltip
+  Chip,
+  Pagination,
+  Button,
+  Avatar,
+  Tooltip,
+  Divider,
+  Stack
 } from '@mui/material';
 import { 
-  CheckCircle, 
-  Cancel, 
-  Assignment, 
-  EmojiEvents, 
+  CheckCircle,
+  Cancel,
+  Assignment,
+  EmojiEvents,
   Warning,
-  Check,
-  Undo
+  Undo,
+  Check 
 } from '@mui/icons-material';
-import { parseISO, isPast, isToday } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, Privilege, RuleViolation, Rule } from '../types';
-import { 
-  taskService, 
-  privilegeService, 
-  ruleViolationService, 
-  ruleService 
-} from '../services/api';
+import { useDataCache } from '../contexts/DataCacheContext';
+import { Task, Privilege, RuleViolation } from '../types';
+import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
-
+import { isPast, isToday, parseISO } from 'date-fns';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -70,22 +64,29 @@ const TabPanel = (props: TabPanelProps) => {
 const Home: React.FC = () => {
   const { authState } = useAuth();
   const navigate = useNavigate();
+  const {
+    getAllTasks,
+    getAllPrivileges,
+    getAllViolations,
+    getUserTasks,
+    getUserPrivileges,
+    getUserViolations,
+    rules,
+    initialLoading
+  } = useDataCache();
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedChild, setSelectedChild] = useState<string | null>(null);
-  const [tabValue, setTabValue] = useState(0);
-  
-  // États pour la pagination
-  const [page, setPage] = useState(1);
-  const [limit] = useState(10);
   const [totalTasks, setTotalTasks] = useState(0);
   const [totalPrivileges, setTotalPrivileges] = useState(0);
   const [totalViolations, setTotalViolations] = useState(0);
+  const [tabValue, setTabValue] = useState(0);
+  const [page, setPage] = useState(1);
+  const [selectedChild, setSelectedChild] = useState<string | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
 
-  // Récupérer les enfants de la famille
+  const limit = 5; // Nombre d'éléments par page
   const children = authState.family.filter(user => !user.isParent);
 
   useEffect(() => {
@@ -97,13 +98,10 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!authState.currentUser) return;
-      setLoading(true);
+      if (!authState.currentUser || initialLoading) return;
+      
+      setViewLoading(true);
       try {
-        // Fetch rules
-        const fetchedRules = await ruleService.getRules();
-        setRules(fetchedRules);
-
         let tasksData: Task[] = [];
         let privilegesData: Privilege[] = [];
         let violationsData: RuleViolation[] = [];
@@ -111,52 +109,56 @@ const Home: React.FC = () => {
         let privilegesTotal = 0;
         let violationsTotal = 0;
 
-        // Fetch tasks
-        try {
-          let tasksResponse;
+        // Fetch data based on current view and tab
+        if (tabValue === 0) { // Tasks tab
           if (authState.currentUser.isParent && selectedChild) {
-            tasksResponse = await taskService.getUserTasks(selectedChild, page, limit);
+            // Parent viewing specific child's tasks
+            const userTasks = getUserTasks(selectedChild);
+            const start = (page - 1) * limit;
+            const end = start + limit;
+            tasksData = userTasks.slice(start, end);
+            tasksTotal = userTasks.length;
           } else if (authState.currentUser.isParent && !selectedChild) {
-            tasksResponse = await taskService.getTasks(page, limit);
+            // Parent viewing all family tasks
+            const allTasksResult = getAllTasks(page, limit);
+            tasksData = allTasksResult.tasks;
+            tasksTotal = allTasksResult.total;
           } else {
-            tasksResponse = await taskService.getUserTasks(authState.currentUser.id, page, limit);
+            // Child viewing their own tasks
+            const userTasks = getUserTasks(authState.currentUser.id);
+            const start = (page - 1) * limit;
+            const end = start + limit;
+            tasksData = userTasks.slice(start, end);
+            tasksTotal = userTasks.length;
           }
-          tasksData = tasksResponse.tasks || [];
-          tasksTotal = tasksResponse.total || 0;
-        } catch (err) {
-          console.error('Error fetching tasks:', err);
-        }
-
-        // Fetch privileges
-        try {
-          let privilegesResponse;
+        } else if (tabValue === 1) { // Privileges tab
           if (authState.currentUser.isParent && selectedChild) {
-            privilegesResponse = await privilegeService.getUserPrivileges(selectedChild, page, limit);
+            const result = await getUserPrivileges(selectedChild, page, limit);
+            privilegesData = result.privileges;
+            privilegesTotal = result.total;
           } else if (authState.currentUser.isParent && !selectedChild) {
-            privilegesResponse = await privilegeService.getPrivileges(page, limit);
+            const result = await getAllPrivileges(page, limit);
+            privilegesData = result.privileges;
+            privilegesTotal = result.total;
           } else {
-            privilegesResponse = await privilegeService.getUserPrivileges(authState.currentUser.id, page, limit);
+            const result = await getUserPrivileges(authState.currentUser.id, page, limit);
+            privilegesData = result.privileges;
+            privilegesTotal = result.total;
           }
-          privilegesData = privilegesResponse.privileges || [];
-          privilegesTotal = privilegesResponse.total || 0;
-        } catch (err) {
-          console.error('Error fetching privileges:', err);
-        }
-
-        // Fetch violations
-        try {
-          let violationsResponse;
+        } else if (tabValue === 2) { // Violations tab
           if (authState.currentUser.isParent && selectedChild) {
-            violationsResponse = await ruleViolationService.getChildRuleViolations(selectedChild, page, limit);
+            const result = await getUserViolations(selectedChild, page, limit);
+            violationsData = result.violations;
+            violationsTotal = result.total;
           } else if (authState.currentUser.isParent && !selectedChild) {
-            violationsResponse = await ruleViolationService.getRuleViolations(page, limit);
+            const result = await getAllViolations(page, limit);
+            violationsData = result.violations;
+            violationsTotal = result.total;
           } else {
-            violationsResponse = await ruleViolationService.getChildRuleViolations(authState.currentUser.id, page, limit);
+            const result = await getUserViolations(authState.currentUser.id, page, limit);
+            violationsData = result.violations;
+            violationsTotal = result.total;
           }
-          violationsData = violationsResponse.violations || [];
-          violationsTotal = violationsResponse.total || 0;
-        } catch (err) {
-          console.error('Error fetching violations:', err);
         }
 
         setTasks(tasksData);
@@ -166,82 +168,24 @@ const Home: React.FC = () => {
         setViolations(violationsData);
         setTotalViolations(violationsTotal);
       } finally {
-        setLoading(false);
+        setViewLoading(false);
       }
     };
 
     fetchData();
-
-    // S'abonner aux changements de données
-    const unsubscribeTasks = taskService.subscribe(() => {
-      if (authState.currentUser) {
-        if (authState.currentUser.isParent && selectedChild) {
-          taskService.getUserTasks(selectedChild, page, limit).then(response => {
-            setTasks(response.tasks || []);
-            setTotalTasks(response.total || 0);
-          });
-        } else if (!authState.currentUser.isParent) {
-          taskService.getUserTasks(authState.currentUser.id, page, limit).then(response => {
-            setTasks(response.tasks || []);
-            setTotalTasks(response.total || 0);
-          });
-        } else {
-          taskService.getTasks(page, limit).then(response => {
-            setTasks(response.tasks || []);
-            setTotalTasks(response.total || 0);
-          });
-        }
-      }
-    });
-
-    const unsubscribePrivileges = privilegeService.subscribe(() => {
-      if (authState.currentUser) {
-        if (authState.currentUser.isParent && selectedChild) {
-          privilegeService.getUserPrivileges(selectedChild, page, limit).then(response => {
-            setPrivileges(response.privileges || []);
-            setTotalPrivileges(response.total || 0);
-          });
-        } else if (!authState.currentUser.isParent) {
-          privilegeService.getUserPrivileges(authState.currentUser.id, page, limit).then(response => {
-            setPrivileges(response.privileges || []);
-            setTotalPrivileges(response.total || 0);
-          });
-        } else {
-          privilegeService.getPrivileges(page, limit).then(response => {
-            setPrivileges(response.privileges || []);
-            setTotalPrivileges(response.total || 0);
-          });
-        }
-      }
-    });
-
-    const unsubscribeViolations = ruleViolationService.subscribe(() => {
-      if (authState.currentUser) {
-        if (authState.currentUser.isParent && selectedChild) {
-          ruleViolationService.getChildRuleViolations(selectedChild, page, limit).then(response => {
-            setViolations(response.violations || []);
-            setTotalViolations(response.total || 0);
-          });
-        } else if (!authState.currentUser.isParent) {
-          ruleViolationService.getChildRuleViolations(authState.currentUser.id, page, limit).then(response => {
-            setViolations(response.violations || []);
-            setTotalViolations(response.total || 0);
-          });
-        } else {
-          ruleViolationService.getRuleViolations(page, limit).then(response => {
-            setViolations(response.violations || []);
-            setTotalViolations(response.total || 0);
-          });
-        }
-      }
-    });
-
-    return () => {
-      unsubscribeTasks();
-      unsubscribePrivileges();
-      unsubscribeViolations();
-    };
-  }, [authState.currentUser, selectedChild, page]);
+  }, [
+    authState.currentUser, 
+    selectedChild, 
+    page, 
+    tabValue, 
+    initialLoading,
+    getAllTasks,
+    getAllPrivileges,
+    getAllViolations,
+    getUserTasks,
+    getUserPrivileges,
+    getUserViolations
+  ]);
 
   const handleToggleTaskComplete = async (task: Task) => {
     try {
@@ -250,7 +194,7 @@ const Home: React.FC = () => {
       } else {
         await taskService.completeTask(task.id);
       }
-      // La mise à jour des tâches sera gérée par l'abonnement
+      // La mise à jour des tâches sera gérée par l'abonnement du cache
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
@@ -271,7 +215,7 @@ const Home: React.FC = () => {
 
   // Fonction pour obtenir le nom de la règle à partir de son ID
   const getRuleName = (ruleId: string): string => {
-    const rule = rules.find(r => r.id === ruleId);
+    const rule = rules?.find(r => r.id === ruleId);
     return rule ? rule.description : ruleId;
   };
 
@@ -283,8 +227,12 @@ const Home: React.FC = () => {
 
   console.log('Tasks to display:', tasks);
 
-  if (loading) {
-    return <Typography>Chargement...</Typography>;
+  if (initialLoading) {
+    return (
+      <Layout>
+        <Typography>Chargement...</Typography>
+      </Layout>
+    );
   }
 
   return (
@@ -313,23 +261,47 @@ const Home: React.FC = () => {
                   sx={{ 
                     width: 40, 
                     height: 40, 
-                    cursor: 'pointer',
+                    cursor: viewLoading ? 'default' : 'pointer',
                     border: selectedChild === child.id ? '2px solid #1976d2' : 'none',
-                    opacity: selectedChild === child.id ? 1 : 0.6
+                    opacity: viewLoading ? 0.5 : (selectedChild === child.id ? 1 : 0.6)
                   }}
-                  onClick={() => handleChildSelect(child.id)}
+                  onClick={viewLoading ? undefined : () => handleChildSelect(child.id)}
                 />
               </Tooltip>
             ))}
           </Box>
+          {viewLoading && (
+            <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
+              Mise à jour...
+            </Typography>
+          )}
         </Box>
       )}
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tabValue} onChange={handleTabChange} aria-label="basic tabs example">
-          <Tab label="Tâches" icon={<Assignment />} iconPosition="start" />
-          <Tab label="Privilèges" icon={<EmojiEvents />} iconPosition="start" />
-          <Tab label="Infractions" icon={<Warning />} iconPosition="start" />
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange} 
+          aria-label="basic tabs example"
+        >
+          <Tab 
+            label="Tâches" 
+            icon={<Assignment />} 
+            iconPosition="start" 
+            disabled={viewLoading}
+          />
+          <Tab 
+            label="Privilèges" 
+            icon={<EmojiEvents />} 
+            iconPosition="start" 
+            disabled={viewLoading}
+          />
+          <Tab 
+            label="Infractions" 
+            icon={<Warning />} 
+            iconPosition="start" 
+            disabled={viewLoading}
+          />
         </Tabs>
       </Box>
 

@@ -34,22 +34,26 @@ import {
 import { format, startOfWeek, addDays, isSameDay, parseISO, isPast, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, Privilege, RuleViolation, Rule } from '../types';
-import { 
-  taskService, 
-  privilegeService, 
-  ruleViolationService, 
-  ruleService 
-} from '../services/api';
+import { useDataCache } from '../contexts/DataCacheContext';
+import { Task, Privilege, RuleViolation } from '../types';
+import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
 
 const Calendar: React.FC = () => {
   const { authState } = useAuth();
+  const { 
+    familyTasks, 
+    familyPrivileges, 
+    familyViolations, 
+    rules, 
+    initialLoading, 
+    dataLoading,
+    getUserTasks
+  } = useDataCache();
+  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
   const [selectedDate] = useState(new Date());
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
@@ -71,141 +75,46 @@ const Calendar: React.FC = () => {
     }
   }, [authState.currentUser, children, selectedChild, viewMode]);
 
+  // Update displayed data when cache or view mode changes
   useEffect(() => {
-    const fetchData = async () => {
-      if (!authState.currentUser) return;
-      setLoading(true);
-      try {
-        // Fetch rules
-        const fetchedRules = await ruleService.getRules();
-        setRules(fetchedRules);
+    if (!authState.currentUser || initialLoading) return;
 
-        let fetchedTasks: Task[] = [];
-        let fetchedPrivileges: Privilege[] = [];
-        let fetchedViolations: RuleViolation[] = [];
-
-        // Fetch tasks
-        try {
-          let tasksResponse;
-          if (viewMode === 'personal') {
-            const userId = authState.currentUser.isParent && selectedChild 
-              ? selectedChild 
-              : authState.currentUser.id;
-            tasksResponse = await taskService.getUserTasks(userId);
-          } else {
-            tasksResponse = await taskService.getTasks();
-          }
-          fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
-        } catch (err) {
-          console.error('Error fetching tasks:', err);
-        }
-
-        // Fetch privileges
-        try {
-          let privilegesResponse;
-          if (viewMode === 'personal') {
-            const userId = authState.currentUser.isParent && selectedChild 
-              ? selectedChild 
-              : authState.currentUser.id;
-            privilegesResponse = await privilegeService.getUserPrivileges(userId);
-          } else {
-            privilegesResponse = await privilegeService.getPrivileges();
-          }
-          fetchedPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
-        } catch (err) {
-          console.error('Error fetching privileges:', err);
-        }
-
-        // Fetch violations
-        try {
-          let violationsResponse;
-          if (viewMode === 'personal') {
-            const userId = authState.currentUser.isParent && selectedChild 
-              ? selectedChild 
-              : authState.currentUser.id;
-            violationsResponse = await ruleViolationService.getChildRuleViolations(userId);
-          } else {
-            violationsResponse = await ruleViolationService.getRuleViolations();
-          }
-          fetchedViolations = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
-        } catch (err) {
-          console.error('Error fetching violations:', err);
-        }
-
-        setTasks(Array.isArray(fetchedTasks) ? fetchedTasks : []);
-        setPrivileges(Array.isArray(fetchedPrivileges) ? fetchedPrivileges : []);
-        setViolations(Array.isArray(fetchedViolations) ? fetchedViolations : []);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-
-    // S'abonner aux changements de données
-    const unsubscribeTasks = taskService.subscribe(() => {
-      if (authState.currentUser) {
-        if (viewMode === 'personal') {
-          const userId = authState.currentUser.isParent && selectedChild 
-            ? selectedChild 
-            : authState.currentUser.id;
-          taskService.getUserTasks(userId).then(response => {
-            const tasks = Array.isArray(response) ? response : (response.tasks || []);
-            setTasks(tasks);
-          });
-        } else {
-          taskService.getTasks().then(response => {
-            const tasks = Array.isArray(response) ? response : (response.tasks || []);
-            setTasks(tasks);
-          });
-        }
-      }
-    });
-
-    const unsubscribePrivileges = privilegeService.subscribe(() => {
-      if (authState.currentUser) {
-        if (viewMode === 'personal') {
-          const userId = authState.currentUser.isParent && selectedChild 
-            ? selectedChild 
-            : authState.currentUser.id;
-          privilegeService.getUserPrivileges(userId).then(response => {
-            const privileges = Array.isArray(response) ? response : (response.privileges || []);
-            setPrivileges(privileges);
-          });
-        } else {
-          privilegeService.getPrivileges().then(response => {
-            const privileges = Array.isArray(response) ? response : (response.privileges || []);
-            setPrivileges(privileges);
-          });
-        }
-      }
-    });
-
-    const unsubscribeViolations = ruleViolationService.subscribe(() => {
-      if (authState.currentUser) {
-        if (viewMode === 'personal') {
-          const userId = authState.currentUser.isParent && selectedChild 
-            ? selectedChild 
-            : authState.currentUser.id;
-          ruleViolationService.getChildRuleViolations(userId).then(response => {
-            const violations = Array.isArray(response) ? response : (response.violations || []);
-            setViolations(violations);
-          });
-        } else {
-          ruleViolationService.getRuleViolations().then(response => {
-            const violations = Array.isArray(response) ? response : (response.violations || []);
-            setViolations(violations);
-          });
-        }
-      }
-    });
-
-    return () => {
-      unsubscribeTasks();
-      unsubscribePrivileges();
-      unsubscribeViolations();
-    };
-  }, [authState.currentUser, viewMode, selectedChild]);
+    if (viewMode === 'family') {
+      // Family view - show all data
+      setTasks(familyTasks || []);
+      setPrivileges(familyPrivileges || []);
+      setViolations(familyViolations || []);
+    } else {
+      // Personal view - filter data for specific user
+      const userId = authState.currentUser.isParent && selectedChild 
+        ? selectedChild 
+        : authState.currentUser.id;
+      
+      // Use cached data for tasks
+      const userTasks = getUserTasks(userId);
+      setTasks(userTasks);
+      
+      // Filter privileges and violations for the user
+      const userPrivileges = (familyPrivileges || []).filter(privilege => 
+        privilege.assignedTo === userId && privilege.canView !== false
+      );
+      const userViolations = (familyViolations || []).filter(violation => 
+        violation.childId === userId && violation.canView !== false
+      );
+      
+      setPrivileges(userPrivileges);
+      setViolations(userViolations);
+    }
+  }, [
+    authState.currentUser, 
+    familyTasks, 
+    familyPrivileges, 
+    familyViolations, 
+    viewMode, 
+    selectedChild, 
+    initialLoading,
+    getUserTasks
+  ]);
 
   const handleViewModeChange = (
     _: React.MouseEvent<HTMLElement>,
@@ -225,13 +134,19 @@ const Calendar: React.FC = () => {
   };
 
   const handleToggleTaskComplete = async (task: Task) => {
+    // Check if user has permission to modify this task
+    if (task.canModify === false) {
+      console.warn('User does not have permission to modify this task');
+      return;
+    }
+    
     try {
       if (task.completed) {
         await taskService.uncompleteTask(task.id);
       } else {
         await taskService.completeTask(task.id);
       }
-      // La mise à jour des tâches sera gérée par l'abonnement
+      // La mise à jour des tâches sera gérée par l'abonnement du cache
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
@@ -254,11 +169,21 @@ const Calendar: React.FC = () => {
   };
 
   const getPrivilegesForDay = (date: Date) => {
-    return Array.isArray(privileges) ? privileges.filter(privilege => isSameDay(parseISO(privilege.date), date)) : [];
+    const dayPrivileges = Array.isArray(privileges) ? privileges.filter(privilege => isSameDay(parseISO(privilege.date), date)) : [];
+    // Filter out privileges that children can't view in family mode
+    if (!authState.currentUser?.isParent && viewMode === 'family') {
+      return dayPrivileges.filter(privilege => privilege.canView !== false);
+    }
+    return dayPrivileges;
   };
 
   const getViolationsForDay = (date: Date) => {
-    return Array.isArray(violations) ? violations.filter(violation => isSameDay(parseISO(violation.date), date)) : [];
+    const dayViolations = Array.isArray(violations) ? violations.filter(violation => isSameDay(parseISO(violation.date), date)) : [];
+    // Filter out violations that children can't view in family mode
+    if (!authState.currentUser?.isParent && viewMode === 'family') {
+      return dayViolations.filter(violation => violation.canView !== false);
+    }
+    return dayViolations;
   };
 
   // Fonction pour obtenir le nom de l'utilisateur à partir de son ID
@@ -269,14 +194,20 @@ const Calendar: React.FC = () => {
 
   // Fonction pour obtenir le nom de la règle à partir de son ID
   const getRuleName = (ruleId: string): string => {
-    const rule = rules.find(r => r.id === ruleId);
+    const rule = rules?.find(r => r.id === ruleId);
     return rule ? rule.description : ruleId;
   };
 
   console.log('Calendar tasks to display:', tasks);
 
-  if (loading) {
-    return <Typography>Chargement...</Typography>;
+  if (initialLoading) {
+    return (
+      <Layout>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+          <Typography>Chargement...</Typography>
+        </Box>
+      </Layout>
+    );
   }
 
   return (
@@ -292,6 +223,7 @@ const Calendar: React.FC = () => {
             exclusive
             onChange={handleViewModeChange}
             aria-label="Mode d'affichage"
+            disabled={dataLoading}
           >
             <ToggleButton value="personal" aria-label="Vue personnelle">
               Vue personnelle
@@ -300,6 +232,12 @@ const Calendar: React.FC = () => {
               Vue familiale
             </ToggleButton>
           </ToggleButtonGroup>
+          
+          {dataLoading && (
+            <Typography variant="body2" color="text.secondary">
+              Mise à jour...
+            </Typography>
+          )}
         </Box>
       </Box>
 
@@ -318,11 +256,11 @@ const Calendar: React.FC = () => {
                   sx={{ 
                     width: 40, 
                     height: 40, 
-                    cursor: 'pointer',
+                    cursor: dataLoading ? 'default' : 'pointer',
                     border: selectedChild === child.id ? '2px solid #1976d2' : 'none',
-                    opacity: selectedChild === child.id ? 1 : 0.6
+                    opacity: dataLoading ? 0.5 : (selectedChild === child.id ? 1 : 0.6)
                   }}
-                  onClick={() => handleChildSelect(child.id)}
+                  onClick={dataLoading ? undefined : () => handleChildSelect(child.id)}
                 />
               </Tooltip>
             ))}
@@ -406,27 +344,32 @@ const Calendar: React.FC = () => {
                                     <Info fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                                {task.completed ? (
-                                  <Tooltip title="Marquer comme non terminé">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={() => handleToggleTaskComplete(task)}
-                                    >
-                                      <Undo fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                ) : (
-                                  <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
-                                    <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
-                                      <IconButton 
-                                        size="small" 
-                                        onClick={() => handleToggleTaskComplete(task)}
-                                        disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
-                                      >
-                                        <Check fontSize="small" />
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
+                                {/* Only show completion buttons if user can modify the task */}
+                                {task.canModify !== false && (
+                                  <>
+                                    {task.completed ? (
+                                      <Tooltip title="Marquer comme non terminé">
+                                        <IconButton 
+                                          size="small" 
+                                          onClick={() => handleToggleTaskComplete(task)}
+                                        >
+                                          <Undo fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    ) : (
+                                      <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                                        <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                                          <IconButton 
+                                            size="small" 
+                                            onClick={() => handleToggleTaskComplete(task)}
+                                            disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                                          >
+                                            <Check fontSize="small" />
+                                          </IconButton>
+                                        </span>
+                                      </Tooltip>
+                                    )}
+                                  </>
                                 )}
                               </Box>
                             </Box>

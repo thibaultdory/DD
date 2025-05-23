@@ -261,6 +261,16 @@ export const taskService = {
     }
     
     await api.delete(`/tasks/${taskId}`);
+  },
+
+  // Récupérer toutes les tâches pour la vue calendrier avec permissions
+  async getTasksForCalendar(): Promise<Task[]> {
+    if (USE_MOCK_DATA) {
+      return [...mockTasks]; // Return all tasks for calendar view
+    }
+    
+    const response = await api.get('/tasks/calendar');
+    return response.data;
   }
 };
 
@@ -369,6 +379,16 @@ export const privilegeService = {
     }
     
     await api.delete(`/privileges/${privilegeId}`);
+  },
+
+  // Récupérer tous les privilèges pour la vue calendrier avec permissions
+  async getPrivilegesForCalendar(): Promise<Privilege[]> {
+    if (USE_MOCK_DATA) {
+      return [...mockPrivileges]; // Return all privileges for calendar view
+    }
+    
+    const response = await api.get('/privileges/calendar');
+    return response.data;
   }
 };
 
@@ -481,6 +501,16 @@ export const ruleViolationService = {
     
     await api.delete(`/rule-violations/${violationId}`);
     notifyChange('violations');
+  },
+
+  // Récupérer toutes les infractions pour la vue calendrier avec permissions
+  async getRuleViolationsForCalendar(): Promise<RuleViolation[]> {
+    if (USE_MOCK_DATA) {
+      return [...mockRuleViolations]; // Return all violations for calendar view
+    }
+    
+    const response = await api.get('/rule-violations/calendar');
+    return response.data;
   }
 };
 

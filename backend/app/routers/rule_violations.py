@@ -31,7 +31,11 @@ async def get_violations(parent: User = Depends(require_parent), db: AsyncSessio
     return [serialize_violation(v) for v in violations]
 
 @router.get("/rule-violations/child/{child_id}")
-async def get_child_violations(child_id: UUID, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
+async def get_child_violations(child_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    # Allow parents to access any child's violations, or children to access their own violations
+    if not (current_user.is_parent or current_user.id == child_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    
     result = await db.execute(select(RuleViolation).where(RuleViolation.child_id == child_id))
     violations = result.scalars().all()
     return [serialize_violation(v) for v in violations]
@@ -82,3 +86,29 @@ async def delete_violation(violation_id: UUID, parent: User = Depends(require_pa
         logger.error(f"Failed to delete rule violation {violation_id}: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete rule violation")
+
+@router.get("/rule-violations/calendar")
+async def get_violations_for_calendar(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """
+    Get all rule violations for calendar view.
+    Parents can see and modify all violations.
+    Children can see all violations but can only view their own violations (read-only).
+    """
+    result = await db.execute(select(RuleViolation))
+    violations = result.scalars().all()
+    
+    serialized_violations = []
+    for violation in violations:
+        violation_data = serialize_violation(violation)
+        # Add permission flag for frontend
+        if current_user.is_parent:
+            violation_data["canModify"] = True
+        else:
+            # Children can only view their own violations (read-only)
+            is_assigned = str(current_user.id) == violation_data["childId"]
+            violation_data["canModify"] = False  # Always read-only for children
+            violation_data["canView"] = is_assigned
+        
+        serialized_violations.append(violation_data)
+    
+    return serialized_violations

@@ -20,6 +20,7 @@ export interface Task {
   isRecurring: boolean;
   weekdays?: number[]; // 1-7 pour lundi-dimanche
   parentTaskId?: string; // ID de la tâche parente si c'est une instance d'une tâche récurrente
+  canModify?: boolean; // Permission flag for calendar view
 }
 
 // Types pour les privilèges
@@ -30,6 +31,8 @@ export interface Privilege {
   assignedTo: string; // ID de l'utilisateur assigné
   earned: boolean;
   date: string;
+  canModify?: boolean; // Permission flag for calendar view
+  canView?: boolean; // Permission flag for calendar view (children)
 }
 
 // Types pour les infractions aux règles
@@ -40,6 +43,8 @@ export interface RuleViolation {
   date: string;
   description?: string;
   reportedBy: string; // ID du parent qui a signalé l'infraction
+  canModify?: boolean; // Permission flag for calendar view
+  canView?: boolean; // Permission flag for calendar view (children)
 }
 
 // Types pour les contrats
