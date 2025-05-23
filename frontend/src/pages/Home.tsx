@@ -97,6 +97,7 @@ const Home: React.FC = () => {
   const [loadingFuture, setLoadingFuture] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [initialTimelineLoaded, setInitialTimelineLoaded] = useState(false);
   
   // Date range for loaded data
   const [dateRange, setDateRange] = useState({
@@ -130,17 +131,36 @@ const Home: React.FC = () => {
     return fullName.split(' ')[0];
   };
 
-  // Convert cached data to timeline items
-  const createTimelineItems = useCallback((tasks: Task[], violations: RuleViolation[]): TimelineItem[] => {
-    console.log('[Timeline] Creating timeline items:', { 
+  // Create timeline items from tasks and violations for a specific date range
+  const createTimelineItemsForRange = useCallback((tasks: Task[], violations: RuleViolation[], startDate: Date, endDate: Date): TimelineItem[] => {
+    console.log('[Timeline] Creating timeline items for range:', { 
       tasksCount: tasks.length, 
-      violationsCount: violations.length 
+      violationsCount: violations.length,
+      startDate: format(startDate, 'yyyy-MM-dd'),
+      endDate: format(endDate, 'yyyy-MM-dd')
     });
     
     const items: TimelineItem[] = [];
     
+    // Filter tasks for this date range
+    const filteredTasks = tasks.filter(task => {
+      const taskDate = parseISO(task.dueDate);
+      return taskDate >= startDate && taskDate <= endDate;
+    });
+    
+    // Filter violations for this date range
+    const filteredViolations = violations.filter(violation => {
+      const violationDate = parseISO(violation.date);
+      return violationDate >= startDate && violationDate <= endDate;
+    });
+    
+    console.log('[Timeline] Filtered for date range:', {
+      tasksInRange: filteredTasks.length,
+      violationsInRange: filteredViolations.length
+    });
+    
     // Add tasks
-    tasks.forEach(task => {
+    filteredTasks.forEach(task => {
       items.push({
         id: `task-${task.id}`,
         type: 'task',
@@ -150,7 +170,7 @@ const Home: React.FC = () => {
     });
     
     // Add violations
-    violations.forEach(violation => {
+    filteredViolations.forEach(violation => {
       items.push({
         id: `violation-${violation.id}`,
         type: 'violation',
@@ -162,12 +182,9 @@ const Home: React.FC = () => {
     // Sort by date (oldest first for chronological timeline)
     const sortedItems = items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
-    console.log('[Timeline] Created items:', {
+    console.log('[Timeline] Created items for range:', {
       totalItems: sortedItems.length,
-      dateRange: sortedItems.length > 0 ? {
-        first: sortedItems[0]?.date,
-        last: sortedItems[sortedItems.length - 1]?.date
-      } : null
+      itemIds: sortedItems.map(item => item.id)
     });
     
     return sortedItems;
@@ -214,9 +231,9 @@ const Home: React.FC = () => {
     return { tasks: filteredTasks, violations: filteredViolations };
   }, [familyTasks, familyViolations, selectedChild, authState.currentUser, getCalendarTasks]);
 
-  // Load initial data and setup timeline
+  // Load initial data and setup timeline - ONLY ONCE
   useEffect(() => {
-    if (!authState.currentUser || initialLoading) return;
+    if (!authState.currentUser || initialLoading || initialTimelineLoaded) return;
     
     console.log('[Timeline] Loading initial data');
     
@@ -234,6 +251,7 @@ const Home: React.FC = () => {
         
         // Set the date range after successful load
         setDateRange({ start: initialStart, end: initialEnd });
+        setInitialTimelineLoaded(true);
         
         console.log('[Timeline] Initial data load completed');
       } catch (error) {
@@ -244,18 +262,36 @@ const Home: React.FC = () => {
     };
     
     loadInitialData();
-  }, [authState.currentUser, initialLoading, refreshFamilyDataForDateRange]);
+  }, [authState.currentUser, initialLoading, initialTimelineLoaded, refreshFamilyDataForDateRange]);
 
-  // Update timeline when data or filters change - ONLY for initial load or filter changes
+  // Create initial timeline ONLY when initial data is loaded for the first time
   useEffect(() => {
-    console.log('[Timeline] Data or filter changed, updating timeline items');
+    if (!initialTimelineLoaded || !familyTasks || !familyViolations) return;
+    
+    // Only create initial timeline if we don't have any items yet
+    if (timelineItems.length === 0) {
+      console.log('[Timeline] Creating initial timeline');
+      
+      const { tasks, violations } = getFilteredData();
+      const items = createTimelineItemsForRange(tasks, violations, dateRange.start, dateRange.end);
+      
+      console.log('[Timeline] Setting initial timeline items:', items.length);
+      setTimelineItems(items);
+    }
+  }, [initialTimelineLoaded, familyTasks, familyViolations, timelineItems.length, getFilteredData, createTimelineItemsForRange, dateRange]);
+
+  // Handle child filter changes - recreate timeline only when child selection changes
+  useEffect(() => {
+    if (!initialTimelineLoaded) return;
+    
+    console.log('[Timeline] Child selection changed, recreating timeline for new filter');
     
     const { tasks, violations } = getFilteredData();
-    const items = createTimelineItems(tasks, violations);
+    const items = createTimelineItemsForRange(tasks, violations, dateRange.start, dateRange.end);
     
-    console.log('[Timeline] Setting new timeline items:', items.length);
+    console.log('[Timeline] Setting filtered timeline items:', items.length);
     setTimelineItems(items);
-  }, [familyTasks, familyViolations, selectedChild, createTimelineItems, getFilteredData]);
+  }, [selectedChild]); // Only depend on selectedChild, not all the data
 
   // Auto-scroll to today's items on initial load (only once)
   useEffect(() => {
@@ -310,10 +346,10 @@ const Home: React.FC = () => {
     }
   }, [timelineItems, loading, initialLoading, dateRange]); // Added dateRange to dependencies
 
-  // Load more data in past direction - APPEND to beginning
+  // Load more data in past direction - PREPEND new items to beginning
   const loadPastData = useCallback(async () => {
-    if (loadingPast || loadingFuture) {
-      console.log('[Timeline] Already loading data, skipping past data load');
+    if (loadingPast || loadingFuture || !initialTimelineLoaded) {
+      console.log('[Timeline] Already loading data or timeline not ready, skipping past data load');
       return;
     }
     
@@ -345,6 +381,25 @@ const Home: React.FC = () => {
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
+      // Get current filtered data
+      const { tasks, violations } = getFilteredData();
+      
+      // Create new items ONLY for the new date range
+      const newItems = createTimelineItemsForRange(tasks, violations, newStart, subDays(dateRange.start, 1));
+      
+      console.log('[Timeline] New past items to prepend:', newItems.length);
+      
+      // PREPEND new items to the beginning of existing timeline
+      setTimelineItems(prevItems => {
+        const updatedItems = [...newItems, ...prevItems];
+        console.log('[Timeline] Timeline after prepending past items:', {
+          oldCount: prevItems.length,
+          newCount: newItems.length,
+          totalCount: updatedItems.length
+        });
+        return updatedItems;
+      });
+      
       // Update date range
       setDateRange(prev => ({ ...prev, start: newStart }));
       
@@ -367,12 +422,12 @@ const Home: React.FC = () => {
     } finally {
       setLoadingPast(false);
     }
-  }, [loadingPast, loadingFuture, dateRange.start, refreshFamilyDataForDateRange]);
+  }, [loadingPast, loadingFuture, initialTimelineLoaded, dateRange.start, refreshFamilyDataForDateRange, getFilteredData, createTimelineItemsForRange]);
 
-  // Load more data in future direction - APPEND to end
+  // Load more data in future direction - APPEND new items to end
   const loadFutureData = useCallback(async () => {
-    if (loadingPast || loadingFuture) {
-      console.log('[Timeline] Already loading data, skipping future data load');
+    if (loadingPast || loadingFuture || !initialTimelineLoaded) {
+      console.log('[Timeline] Already loading data or timeline not ready, skipping future data load');
       return;
     }
     
@@ -403,6 +458,25 @@ const Home: React.FC = () => {
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
+      // Get current filtered data
+      const { tasks, violations } = getFilteredData();
+      
+      // Create new items ONLY for the new date range
+      const newItems = createTimelineItemsForRange(tasks, violations, addDays(dateRange.end, 1), newEnd);
+      
+      console.log('[Timeline] New future items to append:', newItems.length);
+      
+      // APPEND new items to the end of existing timeline
+      setTimelineItems(prevItems => {
+        const updatedItems = [...prevItems, ...newItems];
+        console.log('[Timeline] Timeline after appending future items:', {
+          oldCount: prevItems.length,
+          newCount: newItems.length,
+          totalCount: updatedItems.length
+        });
+        return updatedItems;
+      });
+      
       // Update date range
       setDateRange(prev => ({ ...prev, end: newEnd }));
       
@@ -421,7 +495,7 @@ const Home: React.FC = () => {
     } finally {
       setLoadingFuture(false);
     }
-  }, [loadingPast, loadingFuture, dateRange.end, refreshFamilyDataForDateRange]);
+  }, [loadingPast, loadingFuture, initialTimelineLoaded, dateRange.end, refreshFamilyDataForDateRange, getFilteredData, createTimelineItemsForRange]);
 
   // Improved scroll event handler for infinite scroll with extensive logging
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
