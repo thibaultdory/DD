@@ -8,7 +8,6 @@ import {
   ListItemText,
   ListItemIcon,
   IconButton,
-  Chip,
   Button,
   Avatar,
   Tooltip,
