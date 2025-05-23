@@ -173,18 +173,44 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create task")
 
 @router.put("/tasks/{task_id}")
-async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
+async def update_task(task_id: UUID, updates: TaskUpdate, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     task = await db.get(Task, task_id)
     if not task:
         logger.warning(f"Update attempt on non-existent task: {task_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    if task.created_by != parent.id:
-        logger.warning(f"Unauthorized update attempt on task {task_id} by user {parent.id}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task")
-
+    
     try:
         data = updates.dict(exclude_unset=True)
         logger.info(f"Updating task {task_id} with data: {data}")
+
+        # Check permissions based on user type and update content
+        if current_user.is_parent:
+            # Parents can update tasks they created
+            if task.created_by != current_user.id:
+                logger.warning(f"Unauthorized update attempt on task {task_id} by parent {current_user.id}")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task")
+        else:
+            # Children can only uncomplete tasks they're assigned to
+            # Check if user is assigned to task
+            result = await db.execute(
+                select(task_assignments).where(
+                    task_assignments.c.task_id == task.id,
+                    task_assignments.c.user_id == current_user.id
+                )
+            )
+            is_assigned = result.first() is not None
+            
+            if not is_assigned:
+                logger.warning(f"Child {current_user.id} not assigned to task {task_id}")
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task")
+            
+            # Children can only update the completed field, and only to set it to False (uncomplete)
+            if len(data) != 1 or "completed" not in data or data["completed"] is not False:
+                logger.warning(f"Child {current_user.id} attempted unauthorized update on task {task_id}: {data}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail="Children can only uncomplete tasks (set completed to false)"
+                )
 
         # Si c'est une instance d'une tâche récurrente, on ne peut modifier que completed
         if task.parent_task_id and len(data) > 1 or (len(data) == 1 and "completed" not in data):
@@ -195,8 +221,9 @@ async def update_task(task_id: UUID, updates: TaskUpdate, parent: User = Depends
             )
 
         # Si c'est une tâche récurrente parente, on met à jour toutes les instances futures
+        # Only parents can do this (children can't update recurring parent tasks)
         is_recurring_parent = task.is_recurring and not task.parent_task_id
-        update_future_instances = is_recurring_parent and any(
+        update_future_instances = current_user.is_parent and is_recurring_parent and any(
             field in data for field in ["title", "description", "assignedTo"]
         )
 
