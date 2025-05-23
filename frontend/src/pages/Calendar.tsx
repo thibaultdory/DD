@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, 
   Typography, 
@@ -119,8 +119,8 @@ const Calendar: React.FC = () => {
     }
   };
 
-  // Generate days based on current view
-  const getDaysToDisplay = () => {
+  // Generate days based on current view - memoized to prevent unnecessary recalculations
+  const daysToDisplay = useMemo(() => {
     if (calendarView === 'week') {
       const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
       return [...Array(7)].map((_, i) => addDays(startOfCurrentWeek, i));
@@ -139,17 +139,17 @@ const Calendar: React.FC = () => {
       }
       return days;
     }
-  };
-
-  const daysToDisplay = getDaysToDisplay();
+  }, [selectedDate, calendarView]);
 
   // Fetch data for the specific date range being displayed
   useEffect(() => {
     if (!authState.currentUser || initialLoading) return;
     
     const fetchDataForCurrentPeriod = async () => {
-      const startDate = daysToDisplay[0];
-      const endDate = daysToDisplay[daysToDisplay.length - 1];
+      // Calculate days to display inside the effect to avoid dependency issues
+      const currentDaysToDisplay = daysToDisplay;
+      const startDate = currentDaysToDisplay[0];
+      const endDate = currentDaysToDisplay[currentDaysToDisplay.length - 1];
       
       const startDateStr = format(startDate, 'yyyy-MM-dd');
       const endDateStr = format(endDate, 'yyyy-MM-dd');
@@ -167,7 +167,7 @@ const Calendar: React.FC = () => {
     // Debounce the fetch to avoid excessive calls during rapid navigation
     const timeoutId = setTimeout(fetchDataForCurrentPeriod, 100);
     return () => clearTimeout(timeoutId);
-  }, [selectedDate, calendarView, authState.currentUser, initialLoading, refreshFamilyDataForDateRange, daysToDisplay]);
+  }, [selectedDate, calendarView, authState.currentUser, initialLoading, refreshFamilyDataForDateRange]);
 
   useEffect(() => {
     // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut

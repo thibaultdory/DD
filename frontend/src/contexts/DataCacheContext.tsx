@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Task, Privilege, RuleViolation, Rule } from '../types';
 import { taskService, privilegeService, ruleViolationService, ruleService } from '../services/api';
 import { useAuth } from './AuthContext';
@@ -70,7 +70,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
   const [initialLoading, setInitialLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
 
-  const refreshFamilyData = async () => {
+  const refreshFamilyData = useCallback(async () => {
     if (!authState.currentUser) return;
     
     try {
@@ -93,9 +93,9 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     } finally {
       setInitialLoading(false);
     }
-  };
+  }, [authState.currentUser]);
 
-  const refreshFamilyDataForDateRange = async (startDate: string, endDate: string) => {
+  const refreshFamilyDataForDateRange = useCallback(async (startDate: string, endDate: string) => {
     if (!authState.currentUser) return;
     
     try {
@@ -118,7 +118,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     } finally {
       setDataLoading(false);
     }
-  };
+  }, [authState.currentUser]);
 
   const refreshTasks = async () => {
     if (!authState.currentUser) return;
