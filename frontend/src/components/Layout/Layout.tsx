@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Container, Box } from '@mui/material';
+import { Container, Box, useTheme, useMediaQuery } from '@mui/material';
 import Header from './Header';
 
 interface LayoutProps {
@@ -7,9 +7,21 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <Header />
+      <Box 
+        sx={{ 
+          position: isMobile ? 'sticky' : 'static',
+          top: 0,
+          zIndex: theme.zIndex.appBar,
+          bgcolor: 'background.paper'
+        }}
+      >
+        <Header />
+      </Box>
       <Box 
         component="main" 
         sx={{ 
