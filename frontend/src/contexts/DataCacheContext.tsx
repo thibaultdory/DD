@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { Task, Privilege, RuleViolation, Rule } from '../types';
 import { taskService, privilegeService, ruleViolationService, ruleService } from '../services/api';
 import { useAuth } from './AuthContext';
@@ -69,8 +69,8 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
   const [rules, setRules] = useState<Rule[] | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
-  const [isRefreshingDateRange, setIsRefreshingDateRange] = useState(false);
-  const [lastFetchedRange, setLastFetchedRange] = useState<string | null>(null);
+  const isRefreshingDateRangeRef = useRef(false);
+  const lastFetchedRangeRef = useRef<string | null>(null);
 
   const refreshFamilyData = useCallback(async () => {
     if (!authState.currentUser) return;
@@ -103,7 +103,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     const rangeKey = `${startDate}_${endDate}`;
     
     // Prevent fetching the same range multiple times in quick succession
-    if (lastFetchedRange === rangeKey && dataLoading) {
+    if (lastFetchedRangeRef.current === rangeKey && dataLoading) {
       console.log(`[DataCache] Skipping duplicate request for range: ${startDate} to ${endDate}`);
       return;
     }
@@ -112,8 +112,8 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     
     try {
       setDataLoading(true);
-      setIsRefreshingDateRange(true);
-      setLastFetchedRange(rangeKey);
+      isRefreshingDateRangeRef.current = true;
+      lastFetchedRangeRef.current = rangeKey;
       
       // Fetch data for the specific date range in parallel
       const [rulesResponse, tasksResponse, privilegesResponse, violationsResponse] = await Promise.all([
@@ -133,9 +133,9 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
       console.error('Error refreshing family data for date range:', error);
     } finally {
       setDataLoading(false);
-      setIsRefreshingDateRange(false);
+      isRefreshingDateRangeRef.current = false;
     }
-  }, [authState.currentUser, lastFetchedRange, dataLoading]);
+  }, [authState.currentUser]);
 
   const refreshTasks = async () => {
     if (!authState.currentUser) return;
@@ -203,7 +203,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     // Subscribe to task changes
     const unsubscribeTasks = taskService.subscribe(() => {
       // Ignore subscription events during date range refresh to prevent cascading calls
-      if (isRefreshingDateRange) return;
+      if (isRefreshingDateRangeRef.current) return;
       console.log('Task data changed, refreshing tasks...');
       refreshTasks();
     });
@@ -211,7 +211,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     // Subscribe to privilege changes
     const unsubscribePrivileges = privilegeService.subscribe(() => {
       // Ignore subscription events during date range refresh to prevent cascading calls
-      if (isRefreshingDateRange) return;
+      if (isRefreshingDateRangeRef.current) return;
       console.log('Privilege data changed, refreshing privileges...');
       refreshPrivileges();
     });
@@ -219,7 +219,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     // Subscribe to violation changes
     const unsubscribeViolations = ruleViolationService.subscribe(() => {
       // Ignore subscription events during date range refresh to prevent cascading calls
-      if (isRefreshingDateRange) return;
+      if (isRefreshingDateRangeRef.current) return;
       console.log('Violation data changed, refreshing violations...');
       refreshViolations();
     });
@@ -230,7 +230,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
       unsubscribePrivileges();
       unsubscribeViolations();
     };
-  }, [authState.currentUser, isRefreshingDateRange]);
+  }, [authState.currentUser]);
 
   const refreshUserData = async (userId: string) => {
     setDataLoading(true);
