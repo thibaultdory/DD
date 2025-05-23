@@ -153,8 +153,8 @@ const Home: React.FC = () => {
       });
     });
     
-    // Sort by date (newest first)
-    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    // Sort by date (oldest first for chronological timeline)
+    return items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, []);
 
   // Filter data based on selected child
@@ -218,7 +218,22 @@ const Home: React.FC = () => {
   useEffect(() => {
     const { tasks, violations } = getFilteredData();
     const items = createTimelineItems(tasks, violations);
+    
+    // Preserve scroll position when updating timeline
+    const scrollContainer = scrollContainerRef.current;
+    let preserveScrollTop = 0;
+    if (scrollContainer) {
+      preserveScrollTop = scrollContainer.scrollTop;
+    }
+    
     setTimelineItems(items);
+    
+    // Restore scroll position after DOM update
+    if (scrollContainer && preserveScrollTop > 0) {
+      setTimeout(() => {
+        scrollContainer.scrollTop = preserveScrollTop;
+      }, 0);
+    }
   }, [familyTasks, familyViolations, selectedChild, createTimelineItems, getFilteredData]);
 
   // Auto-scroll to today's items on initial load (only once)
@@ -234,17 +249,40 @@ const Home: React.FC = () => {
           if (itemElement) {
             itemElement.scrollIntoView({ 
               behavior: 'smooth', 
-              block: 'center' 
+              block: 'start'
             });
           }
+        } else {
+          // If no today item found, scroll to approximately where today would be
+          const scrollContainer = scrollContainerRef.current;
+          if (scrollContainer) {
+            const today = new Date();
+            const containerHeight = scrollContainer.scrollHeight;
+            const containerClientHeight = scrollContainer.clientHeight;
+            
+            // Find the relative position of today in the date range
+            const startTime = dateRange.start.getTime();
+            const endTime = dateRange.end.getTime();
+            const todayTime = today.getTime();
+            
+            if (todayTime >= startTime && todayTime <= endTime) {
+              const relativePosition = (todayTime - startTime) / (endTime - startTime);
+              const scrollPosition = Math.max(0, (containerHeight - containerClientHeight) * relativePosition);
+              
+              scrollContainer.scrollTo({
+                top: scrollPosition,
+                behavior: 'smooth'
+              });
+            }
+          }
         }
-      }, 500); // Increased timeout to ensure data is rendered
+      }, 800); // Increased timeout to ensure data is fully rendered
       
       hasAutoScrolled.current = true;
       
       return () => clearTimeout(timer);
     }
-  }, [timelineItems, loading, initialLoading]); // Proper dependencies
+  }, [timelineItems, loading, initialLoading, dateRange]); // Added dateRange to dependencies
 
   // Load more data in past direction
   const loadPastData = useCallback(async () => {
@@ -252,12 +290,26 @@ const Home: React.FC = () => {
     
     setLoadingPast(true);
     try {
+      // Preserve scroll state before loading
+      const scrollContainer = scrollContainerRef.current;
+      const preserveScrollTop = scrollContainer?.scrollTop || 0;
+      const preserveScrollHeight = scrollContainer?.scrollHeight || 0;
+      
       const newStart = subDays(dateRange.start, 7);
       const startDateStr = format(newStart, 'yyyy-MM-dd');
       const endDateStr = format(dateRange.start, 'yyyy-MM-dd');
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       setDateRange(prev => ({ ...prev, start: newStart }));
+      
+      // Restore scroll position accounting for new content at the top
+      if (scrollContainer) {
+        setTimeout(() => {
+          const newScrollHeight = scrollContainer.scrollHeight;
+          const heightDifference = newScrollHeight - preserveScrollHeight;
+          scrollContainer.scrollTop = preserveScrollTop + heightDifference;
+        }, 100); // Small delay to ensure DOM is updated
+      }
     } catch (error) {
       console.error('Error loading past data:', error);
     } finally {
@@ -271,12 +323,23 @@ const Home: React.FC = () => {
     
     setLoadingFuture(true);
     try {
+      // Preserve scroll position (for future data, position should remain stable)
+      const scrollContainer = scrollContainerRef.current;
+      const preserveScrollTop = scrollContainer?.scrollTop || 0;
+      
       const newEnd = addDays(dateRange.end, 7);
       const startDateStr = format(dateRange.end, 'yyyy-MM-dd');
       const endDateStr = format(newEnd, 'yyyy-MM-dd');
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       setDateRange(prev => ({ ...prev, end: newEnd }));
+      
+      // For future data, scroll position should remain the same
+      if (scrollContainer) {
+        setTimeout(() => {
+          scrollContainer.scrollTop = preserveScrollTop;
+        }, 100);
+      }
     } catch (error) {
       console.error('Error loading future data:', error);
     } finally {
@@ -284,17 +347,17 @@ const Home: React.FC = () => {
     }
   }, [loadingFuture, dateRange.end, refreshFamilyDataForDateRange]);
 
-  // Scroll event handler for infinite scroll
+  // Improved scroll event handler for infinite scroll
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     
-    // Near top - load past data (increased threshold to be less aggressive)
-    if (scrollTop < 100 && !loadingPast) {
+    // Near top - load past data (chronological: older events)
+    if (scrollTop < 200 && !loadingPast && !loadingFuture) {
       loadPastData();
     }
     
-    // Near bottom - load future data (increased threshold to be less aggressive)
-    if (scrollHeight - scrollTop - clientHeight < 100 && !loadingFuture) {
+    // Near bottom - load future data (chronological: newer events)
+    if (scrollHeight - scrollTop - clientHeight < 200 && !loadingFuture && !loadingPast) {
       loadFutureData();
     }
   }, [loadingPast, loadingFuture, loadPastData, loadFutureData]);
@@ -543,7 +606,7 @@ const Home: React.FC = () => {
 
             {/* Timeline Items */}
             {Object.keys(groupedItems)
-              .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+              .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
               .map(date => {
                 const dayItems = groupedItems[date];
                 const isToday = isSameDay(parseISO(date), new Date());
