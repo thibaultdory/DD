@@ -14,10 +14,14 @@ const AuthContext = createContext<{
   authState: AuthState;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  authError: string | null;
+  clearAuthError: () => void;
 }>({
   authState: defaultAuthState,
   login: async () => {},
-  logout: async () => {}
+  logout: async () => {},
+  authError: null,
+  clearAuthError: () => {}
 });
 
 // Hook personnalisé pour utiliser le contexte d'authentification
@@ -32,11 +36,37 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>(defaultAuthState);
   const [loading, setLoading] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Vérifier si l'utilisateur est déjà connecté au chargement
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        // Check for OAuth error parameters in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const message = urlParams.get('message');
+        
+        if (error) {
+          // Set error message based on error type
+          let errorMessage = 'Erreur de connexion';
+          if (error === 'oauth_failed') {
+            errorMessage = 'Échec de l\'authentification avec Google. Veuillez réessayer.';
+          } else if (error === 'no_email') {
+            errorMessage = 'Aucune adresse email fournie par Google. Veuillez vérifier vos paramètres de compte.';
+          } else if (error === 'database_error') {
+            errorMessage = 'Erreur lors de la création de votre compte. Veuillez réessayer.';
+          } else if (message) {
+            errorMessage = decodeURIComponent(message);
+          }
+          
+          setAuthError(errorMessage);
+          
+          // Clear error parameters from URL without reloading the page
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, newUrl);
+        }
+
         const user = await authService.getCurrentUser();
         if (user) {
           const family = await authService.getFamilyMembers();
@@ -72,11 +102,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Fonction pour effacer les erreurs d'authentification
+  const clearAuthError = () => {
+    setAuthError(null);
+  };
+
   // Valeur du contexte
   const value = {
     authState,
     login,
-    logout
+    logout,
+    authError,
+    clearAuthError
   };
 
   if (loading) {

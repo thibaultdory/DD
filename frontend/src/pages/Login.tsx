@@ -1,11 +1,11 @@
 import React from 'react';
-import { Box, Button, Typography, Paper, Container } from '@mui/material';
+import { Box, Button, Typography, Paper, Container, Alert } from '@mui/material';
 import { Google as GoogleIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const Login: React.FC = () => {
-  const { login } = useAuth();
+  const { login, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
 
   const handleGoogleLogin = async () => {
@@ -27,6 +27,15 @@ const Login: React.FC = () => {
           alignItems: 'center',
         }}
       >
+        {authError && (
+          <Alert 
+            severity="error" 
+            onClose={clearAuthError}
+            sx={{ width: '100%', mb: 2 }}
+          >
+            {authError}
+          </Alert>
+        )}
         <Paper
           elevation={3}
           sx={{
