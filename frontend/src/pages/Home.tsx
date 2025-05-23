@@ -167,6 +167,21 @@ const Home: React.FC = () => {
       // Check if violationDate is on or after rangeStart AND on or before rangeEnd
       const isAfterOrOnStart = violationDate.getTime() >= rangeStart.getTime();
       const isBeforeOrOnEnd = violationDate.getTime() <= rangeEnd.getTime();
+      
+      // Detailed logging for violations
+      if (true) { // Easy to toggle logging
+        console.log('[TimelineDebug] Violation Check:', {
+          id: violation.id,
+          originalDate: violation.date,
+          parsedViolationDate: parseISO(violation.date).toISOString(),
+          normalizedViolationDate: violationDate.toISOString(),
+          rangeStart: rangeStart.toISOString(),
+          rangeEnd: rangeEnd.toISOString(),
+          isAfterOrOnStart,
+          isBeforeOrOnEnd,
+          isInRange: isAfterOrOnStart && isBeforeOrOnEnd
+        });
+      }
       return isAfterOrOnStart && isBeforeOrOnEnd;
     });
     
@@ -438,10 +453,15 @@ const Home: React.FC = () => {
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
-      const { tasks, violations } = getFilteredData();
-      
+      // Directly use familyTasks and familyViolations from the hook's scope.
+      // These should be the updated values if DataCacheProvider updates them and causes re-render/callback recreation.
+      console.log('[Timeline] After refresh, context familyTasks count:', familyTasks?.length, 'familyViolations count:', familyViolations?.length);
+      const itemsToProcessTasks = familyTasks || [];
+      const itemsToProcessViolations = familyViolations || [];
+
       // Create new items ONLY for the new date range (newStart to fetchEndDate)
-      const newItems = createTimelineItemsForRange(tasks, violations, newStart, fetchEndDate);
+      // Pass the potentially updated familyTasks/Violations from context here.
+      const newItems = createTimelineItemsForRange(itemsToProcessTasks, itemsToProcessViolations, newStart, fetchEndDate);
       
       console.log('[Timeline] New past items to process:', newItems.length);
       
@@ -481,7 +501,7 @@ const Home: React.FC = () => {
     } finally {
       setLoadingPast(false);
     }
-  }, [loadingPast, loadingFuture, initialTimelineLoaded, dateRange.start, refreshFamilyDataForDateRange, getFilteredData, createTimelineItemsForRange]);
+  }, [loadingPast, loadingFuture, initialTimelineLoaded, dateRange.start, refreshFamilyDataForDateRange, getFilteredData, createTimelineItemsForRange, familyTasks, familyViolations]);
 
   // Load more data in future direction - APPEND new items to end
   const loadFutureData = useCallback(async () => {
@@ -525,10 +545,14 @@ const Home: React.FC = () => {
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
-      const { tasks, violations } = getFilteredData();
-      
+      // Directly use familyTasks and familyViolations from the hook's scope.
+      console.log('[Timeline] After refresh, context familyTasks count:', familyTasks?.length, 'familyViolations count:', familyViolations?.length);
+      const itemsToProcessTasksFuture = familyTasks || [];
+      const itemsToProcessViolationsFuture = familyViolations || [];
+
       // Create new items ONLY for the new date range (fetchStartDate to newEnd)
-      const newItems = createTimelineItemsForRange(tasks, violations, fetchStartDate, newEnd);
+      // Pass the potentially updated familyTasks/Violations from context here.
+      const newItems = createTimelineItemsForRange(itemsToProcessTasksFuture, itemsToProcessViolationsFuture, fetchStartDate, newEnd);
       
       console.log('[Timeline] New future items to process:', newItems.length);
       
@@ -568,7 +592,7 @@ const Home: React.FC = () => {
     } finally {
       setLoadingFuture(false);
     }
-  }, [loadingPast, loadingFuture, initialTimelineLoaded, dateRange.end, refreshFamilyDataForDateRange, getFilteredData, createTimelineItemsForRange]);
+  }, [loadingPast, loadingFuture, initialTimelineLoaded, dateRange.end, refreshFamilyDataForDateRange, getFilteredData, createTimelineItemsForRange, familyTasks, familyViolations]);
 
   // Improved scroll event handler for infinite scroll with extensive logging
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
