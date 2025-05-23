@@ -10,19 +10,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Header />
-      <Container 
+      <Box 
         component="main" 
         sx={{ 
           flexGrow: 1, 
           py: { xs: 2, sm: 3 },
-          px: { xs: 1, sm: 2, md: 3 },
-          maxWidth: '100% !important'
+          px: { xs: 2, sm: 3, md: 4 },
+          width: '100%',
+          maxWidth: 'none'
         }}
       >
         {children}
-      </Container>
+      </Box>
       <Box component="footer" sx={{ py: 2, textAlign: 'center', bgcolor: 'background.paper' }}>
-        <Container>
+        <Container maxWidth="lg">
           Assistant de Vie Familiale © {new Date().getFullYear()}
         </Container>
       </Box>
