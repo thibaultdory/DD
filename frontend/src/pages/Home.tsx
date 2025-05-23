@@ -364,7 +364,6 @@ const Home: React.FC = () => {
     lastDataLoadRef.current.past = now;
     
     try {
-      // Get current scroll position BEFORE any changes
       const scrollContainer = scrollContainerRef.current;
       if (!scrollContainer) return;
       
@@ -374,48 +373,66 @@ const Home: React.FC = () => {
       console.log('[Timeline] Before past load - scroll:', beforeScrollTop, 'height:', beforeScrollHeight);
       
       const newStart = subDays(dateRange.start, 7);
+      // Corrected endDate for fetching: it should be the day *before* the current dateRange.start
+      const fetchEndDate = subDays(dateRange.start, 1);
+      
       const startDateStr = format(newStart, 'yyyy-MM-dd');
-      const endDateStr = format(subDays(dateRange.start, 1), 'yyyy-MM-dd'); // Don't overlap
+      const endDateStr = format(fetchEndDate, 'yyyy-MM-dd');
       
       console.log('[Timeline] Loading past data range:', { startDateStr, endDateStr });
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
-      // Get current filtered data
       const { tasks, violations } = getFilteredData();
       
-      // Create new items ONLY for the new date range
-      const newItems = createTimelineItemsForRange(tasks, violations, newStart, subDays(dateRange.start, 1));
+      // Create new items ONLY for the new date range (newStart to fetchEndDate)
+      const newItems = createTimelineItemsForRange(tasks, violations, newStart, fetchEndDate);
       
-      console.log('[Timeline] New past items to prepend:', newItems.length);
+      console.log('[Timeline] New past items to process:', newItems.length);
       
-      // PREPEND new items to the beginning of existing timeline
       setTimelineItems(prevItems => {
-        const updatedItems = [...newItems, ...prevItems];
-        console.log('[Timeline] Timeline after prepending past items:', {
+        const existingItemIds = new Set(prevItems.map(item => item.id));
+        const uniqueNewItems = newItems.filter(item => !existingItemIds.has(item.id));
+        
+        console.log('[Timeline] Unique new past items to prepend:', uniqueNewItems.length);
+        
+        if (uniqueNewItems.length === 0) {
+          console.log('[Timeline] No unique new past items to add.');
+          return prevItems;
+        }
+
+        // Combine and re-sort to ensure chronological order
+        const combinedItems = [...uniqueNewItems, ...prevItems];
+        const sortedItems = combinedItems.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        console.log('[Timeline] Timeline after prepending and sorting past items:', {
           oldCount: prevItems.length,
-          newCount: newItems.length,
-          totalCount: updatedItems.length
+          addedCount: uniqueNewItems.length,
+          totalCount: sortedItems.length
         });
-        return updatedItems;
+        return sortedItems;
       });
       
-      // Update date range
+      // Update date range only after items are set
       setDateRange(prev => ({ ...prev, start: newStart }));
       
       console.log('[Timeline] Past data load completed');
       
-      // Restore scroll position after a short delay
       setTimeout(() => {
         if (scrollContainer) {
           const afterScrollHeight = scrollContainer.scrollHeight;
           const heightDifference = afterScrollHeight - beforeScrollHeight;
-          const newScrollTop = beforeScrollTop + heightDifference;
-          
-          console.log('[Timeline] After past load - restoring scroll to:', newScrollTop);
-          scrollContainer.scrollTop = newScrollTop;
+          // Only adjust scroll if new items were actually added and height changed
+          if (heightDifference > 0) {
+            const newScrollTop = beforeScrollTop + heightDifference;
+            console.log('[Timeline] After past load - restoring scroll to:', newScrollTop);
+            scrollContainer.scrollTop = newScrollTop;
+          } else {
+            console.log('[Timeline] After past load - scroll height did not change, maintaining scroll.');
+            scrollContainer.scrollTop = beforeScrollTop; // Ensure it stays put if no new items
+          }
         }
-      }, 200);
+      }, 250); // Slightly increased delay
       
     } catch (error) {
       console.error('[Timeline] Error loading past data:', error);
@@ -442,53 +459,68 @@ const Home: React.FC = () => {
     lastDataLoadRef.current.future = now;
     
     try {
-      // Get current scroll position BEFORE any changes
       const scrollContainer = scrollContainerRef.current;
       if (!scrollContainer) return;
       
       const beforeScrollTop = scrollContainer.scrollTop;
-      
+      // const beforeScrollHeight = scrollContainer.scrollHeight; // Not needed for future loads as content is appended
+
       console.log('[Timeline] Before future load - scroll:', beforeScrollTop);
       
       const newEnd = addDays(dateRange.end, 7);
-      const startDateStr = format(addDays(dateRange.end, 1), 'yyyy-MM-dd'); // Don't overlap
+      // Corrected startDate for fetching: it should be the day *after* the current dateRange.end
+      const fetchStartDate = addDays(dateRange.end, 1);
+
+      const startDateStr = format(fetchStartDate, 'yyyy-MM-dd');
       const endDateStr = format(newEnd, 'yyyy-MM-dd');
       
       console.log('[Timeline] Loading future data range:', { startDateStr, endDateStr });
       
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
-      // Get current filtered data
       const { tasks, violations } = getFilteredData();
       
-      // Create new items ONLY for the new date range
-      const newItems = createTimelineItemsForRange(tasks, violations, addDays(dateRange.end, 1), newEnd);
+      // Create new items ONLY for the new date range (fetchStartDate to newEnd)
+      const newItems = createTimelineItemsForRange(tasks, violations, fetchStartDate, newEnd);
       
-      console.log('[Timeline] New future items to append:', newItems.length);
+      console.log('[Timeline] New future items to process:', newItems.length);
       
-      // APPEND new items to the end of existing timeline
       setTimelineItems(prevItems => {
-        const updatedItems = [...prevItems, ...newItems];
-        console.log('[Timeline] Timeline after appending future items:', {
+        const existingItemIds = new Set(prevItems.map(item => item.id));
+        const uniqueNewItems = newItems.filter(item => !existingItemIds.has(item.id));
+
+        console.log('[Timeline] Unique new future items to append:', uniqueNewItems.length);
+
+        if (uniqueNewItems.length === 0) {
+          console.log('[Timeline] No unique new future items to add.');
+          return prevItems;
+        }
+
+        // Combine and re-sort to ensure chronological order
+        const combinedItems = [...prevItems, ...uniqueNewItems];
+        const sortedItems = combinedItems.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        console.log('[Timeline] Timeline after appending and sorting future items:', {
           oldCount: prevItems.length,
-          newCount: newItems.length,
-          totalCount: updatedItems.length
+          addedCount: uniqueNewItems.length,
+          totalCount: sortedItems.length
         });
-        return updatedItems;
+        return sortedItems;
       });
       
-      // Update date range
+      // Update date range only after items are set
       setDateRange(prev => ({ ...prev, end: newEnd }));
       
       console.log('[Timeline] Future data load completed');
       
-      // For future data, scroll position should remain stable
+      // For future data, scroll position should ideally remain stable if items are appended at the bottom.
+      // However, if sorting changes things or for robustness, restore.
       setTimeout(() => {
         if (scrollContainer) {
-          console.log('[Timeline] After future load - maintaining scroll at:', beforeScrollTop);
+          console.log('[Timeline] After future load - attempting to maintain scroll at:', beforeScrollTop);
           scrollContainer.scrollTop = beforeScrollTop;
         }
-      }, 200);
+      }, 250); // Slightly increased delay
       
     } catch (error) {
       console.error('[Timeline] Error loading future data:', error);
