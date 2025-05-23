@@ -35,7 +35,7 @@ import { useDataCache } from '../contexts/DataCacheContext';
 import { Task, RuleViolation } from '../types';
 import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
-import { isPast as dateFnIsPast, isToday as dateFnIsToday, parseISO, format, addDays, subDays, isSameDay } from 'date-fns';
+import { isPast as dateFnIsPast, isToday as dateFnIsToday, parseISO, format, addDays, subDays, isSameDay, startOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 // Color schemes for children (consistent with calendar)
@@ -146,20 +146,31 @@ const Home: React.FC = () => {
     });
     
     const items: TimelineItem[] = [];
+    // Normalize range dates to the start of the day for accurate comparison
+    const rangeStart = startOfDay(startDate);
+    const rangeEnd = startOfDay(endDate);
     
     // Filter tasks for this date range
     const filteredTasks = tasks.filter(task => {
-      const taskDate = parseISO(task.dueDate);
-      return taskDate >= startDate && taskDate <= endDate;
+      // Normalize task due date to the start of the day
+      const taskDate = startOfDay(parseISO(task.dueDate));
+      // Check if taskDate is on or after rangeStart AND on or before rangeEnd
+      const isAfterOrOnStart = taskDate.getTime() >= rangeStart.getTime();
+      const isBeforeOrOnEnd = taskDate.getTime() <= rangeEnd.getTime();
+      return isAfterOrOnStart && isBeforeOrOnEnd;
     });
     
     // Filter violations for this date range
     const filteredViolations = violations.filter(violation => {
-      const violationDate = parseISO(violation.date);
-      return violationDate >= startDate && violationDate <= endDate;
+      // Normalize violation date to the start of the day
+      const violationDate = startOfDay(parseISO(violation.date));
+      // Check if violationDate is on or after rangeStart AND on or before rangeEnd
+      const isAfterOrOnStart = violationDate.getTime() >= rangeStart.getTime();
+      const isBeforeOrOnEnd = violationDate.getTime() <= rangeEnd.getTime();
+      return isAfterOrOnStart && isBeforeOrOnEnd;
     });
     
-    console.log('[Timeline] Filtered for date range:', {
+    console.log('[Timeline] Filtered for date range (using startOfDay):', {
       tasksInRange: filteredTasks.length,
       violationsInRange: filteredViolations.length
     });
@@ -169,7 +180,7 @@ const Home: React.FC = () => {
       items.push({
         id: `task-${task.id}`,
         type: 'task',
-        date: task.dueDate,
+        date: task.dueDate, // Use original dueDate for display and sorting consistency
         data: task
       });
     });
@@ -179,7 +190,7 @@ const Home: React.FC = () => {
       items.push({
         id: `violation-${violation.id}`,
         type: 'violation',
-        date: violation.date,
+        date: violation.date, // Use original date for display and sorting consistency
         data: violation
       });
     });
