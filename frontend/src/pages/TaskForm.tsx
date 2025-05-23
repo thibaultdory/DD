@@ -29,7 +29,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
-import { format, addDays, addWeeks, addMonths, addYears } from 'date-fns';
+import { format, addWeeks, addMonths, addYears } from 'date-fns';
 
 const TaskForm: React.FC = () => {
   const { authState } = useAuth();
