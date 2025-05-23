@@ -103,72 +103,78 @@ def get_next_weekday(start_date: date, target_weekday: int) -> date:
 async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
     try:
         logger.info(f"Creating task '{task_in.title}' due {task_in.dueDate}, recurring: {task_in.isRecurring}")
-        # Créer la tâche principale
-        task = Task(
-            title=task_in.title,
-            description=task_in.description,
-            due_date=task_in.dueDate,
-            created_by=parent.id,
-            is_recurring=task_in.isRecurring,
-            weekdays=task_in.weekdays if task_in.isRecurring else None,
-            end_date=task_in.endDate if task_in.isRecurring else None,
-        )
-        db.add(task)
-        await db.flush()
-        await db.refresh(task)
-        logger.debug(f"Created base task with ID: {task.id}")
-
-        # Assigner les utilisateurs
-        for uid in task_in.assignedTo:
-            user = await db.get(User, uid)
-            if not user:
-                logger.warning(f"User {uid} not found during task creation, rolling back.")
+        
+        created_tasks = []
+        
+        # Create a separate task for each assigned child
+        for child_id in task_in.assignedTo:
+            # Verify the child exists
+            child = await db.get(User, child_id)
+            if not child:
                 await db.rollback()
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {uid} not found")
-            # Insert directly into the association table
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"User {child_id} not found")
+            
+            # Create the main task for this child
+            task = Task(
+                title=task_in.title,
+                description=task_in.description,
+                due_date=task_in.dueDate,
+                created_by=parent.id,
+                is_recurring=task_in.isRecurring,
+                weekdays=task_in.weekdays if task_in.isRecurring else None,
+                end_date=task_in.endDate if task_in.isRecurring else None,
+            )
+            db.add(task)
+            await db.flush()
+            await db.refresh(task)
+            
+            # Assign the task to this specific child
             await db.execute(
                 task_assignments.insert().values(
                     task_id=task.id,
-                    user_id=user.id
+                    user_id=child_id
                 )
             )
-            logger.debug(f"Assigned user {uid} to task {task.id}")
+            
+            created_tasks.append(task)
+            
+            # Generate recurring instances for this child's task
+            if task.is_recurring and task.weekdays:
+                end_date = task_in.endDate or (task_in.dueDate + relativedelta(years=1))
+                current = task_in.dueDate
+                one_day = timedelta(days=1)
 
-        # Generate recurring instances
-        if task.is_recurring and task.weekdays:
-            end_date = task_in.endDate or (task_in.dueDate + relativedelta(years=1))
-            logger.info(f"Generating recurring instances for task {task.id} until {end_date}")
-            current = task_in.dueDate
-            one_day = timedelta(days=1)
+                while current <= end_date:
+                    if current != task_in.dueDate and current.isoweekday() in task.weekdays:
+                        instance = Task(
+                            title=task.title,
+                            description=task.description,
+                            due_date=current,
+                            created_by=parent.id,
+                            parent_task_id=task.id,
+                            is_recurring=False
+                        )
+                        db.add(instance)
+                        await db.flush()
 
-            while current <= end_date:
-                if current != task_in.dueDate and current.isoweekday() in task.weekdays:
-                    instance = Task(
-                        title            = task.title,
-                        description      = task.description,
-                        due_date         = current,
-                        created_by       = parent.id,
-                        parent_task_id   = task.id,
-                        is_recurring     = False
-                    )
-                    db.add(instance)
-                    await db.flush() # get instance.id
-                    logger.debug(f"Created recurring instance {instance.id} for date {current}")
-
-                    for user_id in task_in.assignedTo:
+                        # Assign the recurring instance to the same child
                         await db.execute(
                             task_assignments.insert().values(
-                                task_id = instance.id,
-                                user_id = user_id
+                                task_id=instance.id,
+                                user_id=child_id
                             )
                         )
-                        logger.debug(f"Assigned user {user_id} to instance {instance.id}")
-                current += one_day
+                    current += one_day
 
         await db.commit()
-        await db.refresh(task) # Refresh to get potentially updated relationships
-        logger.info(f"Successfully created task {task.id} and its instances (if recurring).")
-        return await serialize_task(task, db)
+        
+        # Return the first created task (for API consistency)
+        if created_tasks:
+            await db.refresh(created_tasks[0])
+            return await serialize_task(created_tasks[0], db)
+        else:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No tasks created")
+            
     except Exception as e:
         logger.error(f"Failed to create task: {e}", exc_info=True)
         await db.rollback()
