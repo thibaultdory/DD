@@ -906,12 +906,24 @@ const Home: React.FC = () => {
                     {/* Date Header */}
                     <Box sx={{ 
                       p: 2, 
-                      bgcolor: isToday ? 'primary.light' : 'grey.100',
-                      borderTop: isToday ? '2px solid' : '1px solid',
-                      borderColor: isToday ? 'primary.main' : 'grey.300',
+                      borderTop: '1px solid',
+                      borderBottom: '1px solid',
+                      borderColor: isToday ? 'primary.light' : 'grey.300',
+                      borderLeft: isToday ? '2px solid' : 'none',
+                      borderRight: isToday ? '2px solid' : 'none',
+                      borderWidth: isToday ? '2px' : '1px',
+                      borderTopColor: isToday ? 'primary.light' : 'grey.300',
+                      borderBottomColor: isToday ? 'primary.light' : 'grey.300',
+                      borderLeftColor: isToday ? 'primary.light' : 'transparent',
+                      borderRightColor: isToday ? 'primary.light' : 'transparent',
+                      borderLeftWidth: isToday ? '2px' : '0px',
+                      borderRightWidth: isToday ? '2px' : '0px',
+                      borderTopWidth: '1px',
+                      borderStyle: 'solid',
                       position: 'sticky',
                       top: 0,
-                      zIndex: 1
+                      zIndex: 1,
+                      backgroundColor: 'background.paper'
                     }}>
                       <Typography 
                         variant="h6" 
@@ -921,18 +933,6 @@ const Home: React.FC = () => {
                         }}
                       >
                         {isToday ? 'Aujourd\'hui' : format(parsedDate, 'EEEE d MMMM yyyy', { locale: fr })}
-                        {isToday && (
-                          <Chip 
-                            label="AUJOURD'HUI" 
-                            size="small" 
-                            sx={{ 
-                              ml: 2, 
-                              bgcolor: 'primary.main', 
-                              color: 'white',
-                              fontWeight: 'bold'
-                            }} 
-                          />
-                        )}
                       </Typography>
                     </Box>
 
