@@ -156,11 +156,13 @@ const Calendar: React.FC = () => {
           // Use calendar endpoint and filter on frontend for personal view
           taskService.getTasksForCalendar().then(response => {
             const allTasks = Array.isArray(response) ? response : [];
-            const userId = authState.currentUser.isParent && selectedChild 
-              ? selectedChild 
-              : authState.currentUser.id;
-            const filteredTasks = allTasks.filter(task => task.assignedTo.includes(userId));
-            setTasks(filteredTasks);
+            if (authState.currentUser) {
+              const userId = authState.currentUser.isParent && selectedChild 
+                ? selectedChild 
+                : authState.currentUser.id;
+              const filteredTasks = allTasks.filter(task => task.assignedTo.includes(userId));
+              setTasks(filteredTasks);
+            }
           });
         } else {
           // Use calendar endpoint for family view
