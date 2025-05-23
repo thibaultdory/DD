@@ -112,3 +112,29 @@ async def delete_privilege(privilege_id: UUID, parent: User = Depends(require_pa
         logger.error(f"Failed to delete privilege {privilege_id}: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete privilege")
+
+@router.get("/privileges/calendar")
+async def get_privileges_for_calendar(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """
+    Get all privileges for calendar view.
+    Parents can see and modify all privileges.
+    Children can see all privileges but can only view their assigned privileges (read-only).
+    """
+    result = await db.execute(select(Privilege))
+    privs = result.scalars().all()
+    
+    serialized_privs = []
+    for priv in privs:
+        priv_data = serialize_priv(priv)
+        # Add permission flag for frontend
+        if current_user.is_parent:
+            priv_data["canModify"] = True
+        else:
+            # Children can only view their own privileges (read-only)
+            is_assigned = str(current_user.id) == priv_data["assignedTo"]
+            priv_data["canModify"] = False  # Always read-only for children
+            priv_data["canView"] = is_assigned
+        
+        serialized_privs.append(priv_data)
+    
+    return serialized_privs

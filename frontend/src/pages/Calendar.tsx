@@ -93,7 +93,8 @@ const Calendar: React.FC = () => {
               : authState.currentUser.id;
             tasksResponse = await taskService.getUserTasks(userId);
           } else {
-            tasksResponse = await taskService.getTasks();
+            // Use calendar endpoint for family view to get all tasks with permissions
+            tasksResponse = await taskService.getTasksForCalendar();
           }
           fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
         } catch (err) {
@@ -109,7 +110,8 @@ const Calendar: React.FC = () => {
               : authState.currentUser.id;
             privilegesResponse = await privilegeService.getUserPrivileges(userId);
           } else {
-            privilegesResponse = await privilegeService.getPrivileges();
+            // Use calendar endpoint for family view to get all privileges with permissions
+            privilegesResponse = await privilegeService.getPrivilegesForCalendar();
           }
           fetchedPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
         } catch (err) {
@@ -125,7 +127,8 @@ const Calendar: React.FC = () => {
               : authState.currentUser.id;
             violationsResponse = await ruleViolationService.getChildRuleViolations(userId);
           } else {
-            violationsResponse = await ruleViolationService.getRuleViolations();
+            // Use calendar endpoint for family view to get all violations with permissions
+            violationsResponse = await ruleViolationService.getRuleViolationsForCalendar();
           }
           fetchedViolations = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
         } catch (err) {
@@ -154,8 +157,9 @@ const Calendar: React.FC = () => {
             setTasks(tasks);
           });
         } else {
-          taskService.getTasks().then(response => {
-            const tasks = Array.isArray(response) ? response : (response.tasks || []);
+          // Use calendar endpoint for family view
+          taskService.getTasksForCalendar().then(response => {
+            const tasks = Array.isArray(response) ? response : [];
             setTasks(tasks);
           });
         }
@@ -173,8 +177,9 @@ const Calendar: React.FC = () => {
             setPrivileges(privileges);
           });
         } else {
-          privilegeService.getPrivileges().then(response => {
-            const privileges = Array.isArray(response) ? response : (response.privileges || []);
+          // Use calendar endpoint for family view
+          privilegeService.getPrivilegesForCalendar().then(response => {
+            const privileges = Array.isArray(response) ? response : [];
             setPrivileges(privileges);
           });
         }
@@ -192,8 +197,9 @@ const Calendar: React.FC = () => {
             setViolations(violations);
           });
         } else {
-          ruleViolationService.getRuleViolations().then(response => {
-            const violations = Array.isArray(response) ? response : (response.violations || []);
+          // Use calendar endpoint for family view
+          ruleViolationService.getRuleViolationsForCalendar().then(response => {
+            const violations = Array.isArray(response) ? response : [];
             setViolations(violations);
           });
         }
@@ -225,6 +231,12 @@ const Calendar: React.FC = () => {
   };
 
   const handleToggleTaskComplete = async (task: Task) => {
+    // Check if user has permission to modify this task
+    if (task.canModify === false) {
+      console.warn('User does not have permission to modify this task');
+      return;
+    }
+    
     try {
       if (task.completed) {
         await taskService.uncompleteTask(task.id);
@@ -254,11 +266,21 @@ const Calendar: React.FC = () => {
   };
 
   const getPrivilegesForDay = (date: Date) => {
-    return Array.isArray(privileges) ? privileges.filter(privilege => isSameDay(parseISO(privilege.date), date)) : [];
+    const dayPrivileges = Array.isArray(privileges) ? privileges.filter(privilege => isSameDay(parseISO(privilege.date), date)) : [];
+    // Filter out privileges that children can't view in family mode
+    if (!authState.currentUser?.isParent && viewMode === 'family') {
+      return dayPrivileges.filter(privilege => privilege.canView !== false);
+    }
+    return dayPrivileges;
   };
 
   const getViolationsForDay = (date: Date) => {
-    return Array.isArray(violations) ? violations.filter(violation => isSameDay(parseISO(violation.date), date)) : [];
+    const dayViolations = Array.isArray(violations) ? violations.filter(violation => isSameDay(parseISO(violation.date), date)) : [];
+    // Filter out violations that children can't view in family mode
+    if (!authState.currentUser?.isParent && viewMode === 'family') {
+      return dayViolations.filter(violation => violation.canView !== false);
+    }
+    return dayViolations;
   };
 
   // Fonction pour obtenir le nom de l'utilisateur à partir de son ID
@@ -406,27 +428,32 @@ const Calendar: React.FC = () => {
                                     <Info fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                                {task.completed ? (
-                                  <Tooltip title="Marquer comme non terminé">
-                                    <IconButton 
-                                      size="small" 
-                                      onClick={() => handleToggleTaskComplete(task)}
-                                    >
-                                      <Undo fontSize="small" />
-                                    </IconButton>
-                                  </Tooltip>
-                                ) : (
-                                  <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
-                                    <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
-                                      <IconButton 
-                                        size="small" 
-                                        onClick={() => handleToggleTaskComplete(task)}
-                                        disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
-                                      >
-                                        <Check fontSize="small" />
-                                      </IconButton>
-                                    </span>
-                                  </Tooltip>
+                                {/* Only show completion buttons if user can modify the task */}
+                                {task.canModify !== false && (
+                                  <>
+                                    {task.completed ? (
+                                      <Tooltip title="Marquer comme non terminé">
+                                        <IconButton 
+                                          size="small" 
+                                          onClick={() => handleToggleTaskComplete(task)}
+                                        >
+                                          <Undo fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    ) : (
+                                      <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                                        <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                                          <IconButton 
+                                            size="small" 
+                                            onClick={() => handleToggleTaskComplete(task)}
+                                            disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                                          >
+                                            <Check fontSize="small" />
+                                          </IconButton>
+                                        </span>
+                                      </Tooltip>
+                                    )}
+                                  </>
                                 )}
                               </Box>
                             </Box>

@@ -362,3 +362,29 @@ async def delete_task(
         logger.error(f"Failed to delete task {task_id}: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete task")
+
+@router.get("/tasks/calendar")
+async def get_tasks_for_calendar(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """
+    Get all tasks for calendar view. 
+    Parents can see and modify all tasks.
+    Children can see all tasks but can only modify their assigned tasks (enforced in frontend).
+    """
+    # Get all tasks for calendar view
+    result = await db.execute(select(Task))
+    tasks = result.scalars().all()
+    
+    serialized_tasks = []
+    for task in tasks:
+        task_data = await serialize_task(task, db)
+        # Add permission flag for frontend
+        if current_user.is_parent:
+            task_data["canModify"] = True
+        else:
+            # Check if current user is assigned to this task
+            is_assigned = str(current_user.id) in task_data["assignedTo"]
+            task_data["canModify"] = is_assigned
+        
+        serialized_tasks.append(task_data)
+    
+    return serialized_tasks
