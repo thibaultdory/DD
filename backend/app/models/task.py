@@ -27,6 +27,8 @@ class Task(Base):
     is_recurring = Column(Boolean, default=False, nullable=False)
     # Stocke les jours de la semaine (1-7 pour lundi-dimanche)
     weekdays = Column(ARRAY(Integer), nullable=True)
+    # Date de fin pour les tâches récurrentes
+    end_date = Column(Date, nullable=True)
     # ID de la tâche parente si c'est une instance d'une tâche récurrente
     parent_task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=True)
 
