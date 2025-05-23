@@ -249,6 +249,8 @@ const Calendar: React.FC = () => {
     return rule ? rule.description : ruleId;
   };
 
+  console.log('Calendar tasks to display:', tasks);
+
   if (loading) {
     return <Typography>Chargement...</Typography>;
   }

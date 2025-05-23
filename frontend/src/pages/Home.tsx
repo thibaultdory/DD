@@ -275,6 +275,8 @@ const Home: React.FC = () => {
     return user ? user.name : 'Inconnu';
   };
 
+  console.log('Tasks to display:', tasks);
+
   if (loading) {
     return <Typography>Chargement...</Typography>;
   }
