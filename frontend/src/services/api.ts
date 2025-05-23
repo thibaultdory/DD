@@ -136,9 +136,13 @@ export const taskService = {
   // Récupérer toutes les tâches avec pagination
   async getTasks(page: number = 1, limit: number = 10): Promise<{ tasks: Task[], total: number }> {
     if (USE_MOCK_DATA) {
+      // Sort tasks by due date (oldest first)
+      const sortedTasks = [...mockTasks].sort((a, b) => 
+        new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      );
       const start = (page - 1) * limit;
       const end = start + limit;
-      const paginatedTasks = [...mockTasks].slice(start, end);
+      const paginatedTasks = sortedTasks.slice(start, end);
       return {
         tasks: paginatedTasks,
         total: mockTasks.length
@@ -154,9 +158,13 @@ export const taskService = {
   async getUserTasks(userId: string, page: number = 1, limit: number = 10): Promise<{ tasks: Task[], total: number }> {
     if (USE_MOCK_DATA) {
       const userTasks = mockTasks.filter(task => task.assignedTo.includes(userId));
+      // Sort tasks by due date (oldest first)
+      const sortedTasks = userTasks.sort((a, b) => 
+        new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      );
       const start = (page - 1) * limit;
       const end = start + limit;
-      const paginatedTasks = userTasks.slice(start, end);
+      const paginatedTasks = sortedTasks.slice(start, end);
       return {
         tasks: paginatedTasks,
         total: userTasks.length
@@ -192,6 +200,7 @@ export const taskService = {
     }
     
     const response = await api.post('/tasks', task);
+    notifyChange('tasks');
     return response.data;
   },
 
@@ -208,6 +217,7 @@ export const taskService = {
     }
     
     const response = await api.put(`/tasks/${taskId}`, updates);
+    notifyChange('tasks');
     return response.data;
   },
 
@@ -249,7 +259,7 @@ export const taskService = {
   },
 
   // Supprimer une tâche (parents uniquement)
-  async deleteTask(taskId: string): Promise<void> {
+  async deleteTask(taskId: string, deleteFuture: boolean = false): Promise<void> {
     if (USE_MOCK_DATA) {
       const index = mockTasks.findIndex(t => t.id === taskId);
       if (index !== -1) {
@@ -260,7 +270,10 @@ export const taskService = {
       throw new Error('Task not found');
     }
     
-    await api.delete(`/tasks/${taskId}`);
+    await api.delete(`/tasks/${taskId}`, {
+      params: { delete_future: deleteFuture }
+    });
+    notifyChange('tasks');
   },
 
   // Récupérer toutes les tâches pour la vue calendrier avec permissions
@@ -347,6 +360,7 @@ export const privilegeService = {
     }
     
     const response = await api.post('/privileges', privilege);
+    notifyChange('privileges');
     return response.data;
   },
 
@@ -363,6 +377,7 @@ export const privilegeService = {
     }
     
     const response = await api.put(`/privileges/${privilegeId}`, updates);
+    notifyChange('privileges');
     return response.data;
   },
 
@@ -379,6 +394,7 @@ export const privilegeService = {
     }
     
     await api.delete(`/privileges/${privilegeId}`);
+    notifyChange('privileges');
   },
 
   // Récupérer tous les privilèges pour la vue calendrier avec permissions
