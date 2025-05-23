@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import {
   Typography,
   Box,
@@ -81,6 +81,11 @@ const Home: React.FC = () => {
   const hasAutoScrolled = useRef(false);
   const lastDataLoadRef = useRef<{ past: number, future: number }>({ past: 0, future: 0 });
   
+  // Refs for scroll position preservation
+  const beforeScrollTopRef = useRef(0);
+  const beforeScrollHeightRef = useRef(0);
+  const loadTypeRef = useRef<'past' | 'future' | null>(null);
+
   const {
     familyTasks, 
     familyViolations, 
@@ -293,6 +298,40 @@ const Home: React.FC = () => {
     setTimelineItems(items);
   }, [selectedChild]); // Only depend on selectedChild, not all the data
 
+  // useLayoutEffect for scroll stabilization after timelineItems change
+  useLayoutEffect(() => {
+    if (!scrollContainerRef.current || !loadTypeRef.current) {
+      // If no specific load type is set, or container not ready, do nothing.
+      // This ensures this effect only acts on our specific past/future loads.
+      return;
+    }
+    const scrollContainer = scrollContainerRef.current;
+
+    if (loadTypeRef.current === 'past') {
+      const currentScrollHeight = scrollContainer.scrollHeight;
+      const previousScrollHeight = beforeScrollHeightRef.current;
+      const previousScrollTop = beforeScrollTopRef.current;
+      
+      const heightDifference = currentScrollHeight - previousScrollHeight;
+
+      // Only adjust if scrollHeight has actually increased and was previously non-zero
+      if (heightDifference > 0 && previousScrollHeight > 0) {
+        scrollContainer.scrollTop = previousScrollTop + heightDifference;
+        console.log('[Timeline] Adjusted scroll for PAST load:', { previousScrollTop, previousScrollHeight, currentScrollHeight, heightDifference, newScrollTop: scrollContainer.scrollTop });
+      } else {
+        // If no height change (e.g., no unique items added) or unexpected scrollHeight, maintain previous scrollTop
+        scrollContainer.scrollTop = previousScrollTop;
+        console.log('[Timeline] Maintained scroll for PAST load (no height change or unexpected height):', { previousScrollTop, currentScrollHeight });
+      }
+    } else if (loadTypeRef.current === 'future') {
+      // For future loads, content is appended, so we want to maintain the current scroll position.
+      scrollContainer.scrollTop = beforeScrollTopRef.current;
+      console.log('[Timeline] Maintained scroll for FUTURE load at:', beforeScrollTopRef.current);
+    }
+
+    loadTypeRef.current = null; // Reset the load type ref after handling
+  }, [timelineItems]); // This effect depends on timelineItems changing
+
   // Auto-scroll to today's items on initial load (only once)
   useEffect(() => {
     if (timelineItems.length > 0 && !loading && !initialLoading && !hasAutoScrolled.current) {
@@ -367,10 +406,15 @@ const Home: React.FC = () => {
       const scrollContainer = scrollContainerRef.current;
       if (!scrollContainer) return;
       
-      const beforeScrollTop = scrollContainer.scrollTop;
-      const beforeScrollHeight = scrollContainer.scrollHeight;
+      // Store scroll position *before* any data fetching or state changes
+      beforeScrollTopRef.current = scrollContainer.scrollTop;
+      beforeScrollHeightRef.current = scrollContainer.scrollHeight;
+      loadTypeRef.current = 'past'; // Indicate that a 'past' load is about to happen
+
+      // const beforeScrollTop = scrollContainer.scrollTop; // No longer needed here
+      // const beforeScrollHeight = scrollContainer.scrollHeight; // No longer needed here
       
-      console.log('[Timeline] Before past load - scroll:', beforeScrollTop, 'height:', beforeScrollHeight);
+      console.log('[Timeline] Before past load - Stored scroll:', beforeScrollTopRef.current, 'Stored height:', beforeScrollHeightRef.current);
       
       const newStart = subDays(dateRange.start, 7);
       // Corrected endDate for fetching: it should be the day *before* the current dateRange.start
@@ -418,21 +462,8 @@ const Home: React.FC = () => {
       
       console.log('[Timeline] Past data load completed');
       
-      setTimeout(() => {
-        if (scrollContainer) {
-          const afterScrollHeight = scrollContainer.scrollHeight;
-          const heightDifference = afterScrollHeight - beforeScrollHeight;
-          // Only adjust scroll if new items were actually added and height changed
-          if (heightDifference > 0) {
-            const newScrollTop = beforeScrollTop + heightDifference;
-            console.log('[Timeline] After past load - restoring scroll to:', newScrollTop);
-            scrollContainer.scrollTop = newScrollTop;
-          } else {
-            console.log('[Timeline] After past load - scroll height did not change, maintaining scroll.');
-            scrollContainer.scrollTop = beforeScrollTop; // Ensure it stays put if no new items
-          }
-        }
-      }, 250); // Slightly increased delay
+      // REMOVE OLD setTimeout for scroll adjustment
+      // setTimeout(() => { ... }, 250);
       
     } catch (error) {
       console.error('[Timeline] Error loading past data:', error);
@@ -462,10 +493,15 @@ const Home: React.FC = () => {
       const scrollContainer = scrollContainerRef.current;
       if (!scrollContainer) return;
       
-      const beforeScrollTop = scrollContainer.scrollTop;
-      // const beforeScrollHeight = scrollContainer.scrollHeight; // Not needed for future loads as content is appended
+      // Store scroll position *before* any data fetching or state changes
+      beforeScrollTopRef.current = scrollContainer.scrollTop;
+      // beforeScrollHeightRef is not strictly needed for future loads but good practice if logic changes
+      // beforeScrollHeightRef.current = scrollContainer.scrollHeight; 
+      loadTypeRef.current = 'future'; // Indicate that a 'future' load is about to happen
 
-      console.log('[Timeline] Before future load - scroll:', beforeScrollTop);
+      // const beforeScrollTop = scrollContainer.scrollTop; // No longer needed here
+      
+      console.log('[Timeline] Before future load - Stored scroll:', beforeScrollTopRef.current);
       
       const newEnd = addDays(dateRange.end, 7);
       // Corrected startDate for fetching: it should be the day *after* the current dateRange.end
@@ -513,14 +549,8 @@ const Home: React.FC = () => {
       
       console.log('[Timeline] Future data load completed');
       
-      // For future data, scroll position should ideally remain stable if items are appended at the bottom.
-      // However, if sorting changes things or for robustness, restore.
-      setTimeout(() => {
-        if (scrollContainer) {
-          console.log('[Timeline] After future load - attempting to maintain scroll at:', beforeScrollTop);
-          scrollContainer.scrollTop = beforeScrollTop;
-        }
-      }, 250); // Slightly increased delay
+      // REMOVE OLD setTimeout for scroll adjustment
+      // setTimeout(() => { ... }, 250);
       
     } catch (error) {
       console.error('[Timeline] Error loading future data:', error);
@@ -532,6 +562,7 @@ const Home: React.FC = () => {
   // Improved scroll event handler for infinite scroll with extensive logging
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    const scrollThreshold = 10; // Trigger loading when 10px from edge
     
     // Only log every 10th scroll event to avoid spam
     if (Math.random() < 0.1) {
@@ -547,17 +578,17 @@ const Home: React.FC = () => {
     }
     
     // Near top - load past data (chronological: older events)
-    if (scrollTop < 300 && !loadingPast && !loadingFuture) {
-      console.log('[Timeline] Triggering past data load from scroll');
+    if (scrollTop < scrollThreshold && !loadingPast && !loadingFuture && initialTimelineLoaded) {
+      console.log('[Timeline] Triggering past data load from scroll (scrollTop < threshold)');
       loadPastData();
     }
     
     // Near bottom - load future data (chronological: newer events)
-    if (scrollHeight - scrollTop - clientHeight < 300 && !loadingFuture && !loadingPast) {
-      console.log('[Timeline] Triggering future data load from scroll');
+    if (scrollHeight - scrollTop - clientHeight < scrollThreshold && !loadingFuture && !loadingPast && initialTimelineLoaded) {
+      console.log('[Timeline] Triggering future data load from scroll (bottom < threshold)');
       loadFutureData();
     }
-  }, [loadingPast, loadingFuture, loadPastData, loadFutureData]);
+  }, [loadingPast, loadingFuture, loadPastData, loadFutureData, initialTimelineLoaded]);
 
   // Child selection for parents
   useEffect(() => {
