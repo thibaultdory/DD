@@ -31,6 +31,7 @@ async def serialize_task(task: Task, db: AsyncSession):
         "createdAt": task.created_at.isoformat(),
         "isRecurring": task.is_recurring,
         "weekdays": task.weekdays if task.weekdays else None,
+        "endDate": task.end_date.isoformat() if task.end_date else None,
         "parentTaskId": str(task.parent_task_id) if task.parent_task_id else None,
     }
 
@@ -110,6 +111,7 @@ async def create_task(task_in: TaskCreate, parent: User = Depends(require_parent
             created_by=parent.id,
             is_recurring=task_in.isRecurring,
             weekdays=task_in.weekdays if task_in.isRecurring else None,
+            end_date=task_in.endDate if task_in.isRecurring else None,
         )
         db.add(task)
         await db.flush()
@@ -240,6 +242,8 @@ async def update_task(task_id: UUID, updates: TaskUpdate, current_user: User = D
             task.is_recurring = data["isRecurring"]
         if "weekdays" in data:
             task.weekdays = data["weekdays"]
+        if "endDate" in data:
+            task.end_date = data["endDate"]
         if "assignedTo" in data:
             logger.debug(f"Updating assignments for task {task_id}")
             # Delete existing assignments

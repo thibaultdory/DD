@@ -19,6 +19,7 @@ export interface Task {
   createdAt: string;
   isRecurring: boolean;
   weekdays?: number[]; // 1-7 pour lundi-dimanche
+  endDate?: string; // Date de fin pour les tâches récurrentes
   parentTaskId?: string; // ID de la tâche parente si c'est une instance d'une tâche récurrente
   canModify?: boolean; // Permission flag for calendar view
 }

@@ -17,7 +17,9 @@ import {
   Switch,
   FormControlLabel,
   ToggleButton,
-  ToggleButtonGroup
+  ToggleButtonGroup,
+  RadioGroup,
+  Radio
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -27,7 +29,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
-import { format } from 'date-fns';
+import { format, addWeeks, addMonths, addYears } from 'date-fns';
 
 const TaskForm: React.FC = () => {
   const { authState } = useAuth();
@@ -41,6 +43,10 @@ const TaskForm: React.FC = () => {
   const [assignedTo, setAssignedTo] = useState<string[]>([]);
   const [isRecurring, setIsRecurring] = useState(false);
   const [weekdays, setWeekdays] = useState<number[]>([]);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [endDateMode, setEndDateMode] = useState<'duration' | 'specific'>('duration');
+  const [durationNumber, setDurationNumber] = useState<number>(4);
+  const [durationUnit, setDurationUnit] = useState<'weeks' | 'months' | 'years'>('weeks');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -64,6 +70,10 @@ const TaskForm: React.FC = () => {
             setAssignedTo(task.assignedTo);
             setIsRecurring(task.isRecurring);
             setWeekdays(task.weekdays || []);
+            if (task.endDate) {
+              setEndDate(new Date(task.endDate));
+              setEndDateMode('specific');
+            }
           } else {
             setError('Tâche non trouvée');
           }
@@ -78,6 +88,27 @@ const TaskForm: React.FC = () => {
 
     fetchTask();
   }, [isEditing, taskId]);
+
+  // Calculate end date when duration changes
+  useEffect(() => {
+    if (isRecurring && endDateMode === 'duration' && dueDate) {
+      let calculatedEndDate: Date;
+      switch (durationUnit) {
+        case 'weeks':
+          calculatedEndDate = addWeeks(dueDate, durationNumber);
+          break;
+        case 'months':
+          calculatedEndDate = addMonths(dueDate, durationNumber);
+          break;
+        case 'years':
+          calculatedEndDate = addYears(dueDate, durationNumber);
+          break;
+        default:
+          calculatedEndDate = addWeeks(dueDate, durationNumber);
+      }
+      setEndDate(calculatedEndDate);
+    }
+  }, [isRecurring, endDateMode, durationNumber, durationUnit, dueDate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,11 +133,17 @@ const TaskForm: React.FC = () => {
       return;
     }
 
+    if (isRecurring && !endDate) {
+      setError('Veuillez définir une date de fin pour la tâche récurrente');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
       
       const formattedDueDate = format(dueDate, 'yyyy-MM-dd');
+      const formattedEndDate = endDate && isRecurring ? format(endDate, 'yyyy-MM-dd') : undefined;
       
       if (isEditing && taskId) {
         await taskService.updateTask(taskId, {
@@ -115,7 +152,8 @@ const TaskForm: React.FC = () => {
           dueDate: formattedDueDate,
           assignedTo,
           isRecurring,
-          weekdays: isRecurring ? weekdays : undefined
+          weekdays: isRecurring ? weekdays : undefined,
+          endDate: formattedEndDate
         });
         setSuccess('Tâche mise à jour avec succès');
       } else {
@@ -127,7 +165,8 @@ const TaskForm: React.FC = () => {
           completed: false,
           createdBy: authState.currentUser?.id || '',
           isRecurring,
-          weekdays: isRecurring ? weekdays : undefined
+          weekdays: isRecurring ? weekdays : undefined,
+          endDate: formattedEndDate
         });
         setSuccess('Tâche créée avec succès');
       }
@@ -261,6 +300,78 @@ const TaskForm: React.FC = () => {
                 Sélectionnez les jours où la tâche doit être répétée
               </FormHelperText>
             </FormControl>
+          )}
+
+          {isRecurring && (
+            <Box sx={{ mt: 2, mb: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Date de fin de la récurrence
+              </Typography>
+              
+              <FormControl component="fieldset" sx={{ mb: 2 }}>
+                <RadioGroup
+                  value={endDateMode}
+                  onChange={(e) => setEndDateMode(e.target.value as 'duration' | 'specific')}
+                  row
+                >
+                  <FormControlLabel
+                    value="duration"
+                    control={<Radio />}
+                    label="Durée"
+                  />
+                  <FormControlLabel
+                    value="specific"
+                    control={<Radio />}
+                    label="Date spécifique"
+                  />
+                </RadioGroup>
+              </FormControl>
+
+              {endDateMode === 'duration' ? (
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                  <Box sx={{ flex: 1 }}>
+                    <TextField
+                      label="Nombre"
+                      type="number"
+                      value={durationNumber}
+                      onChange={(e) => setDurationNumber(Math.max(1, parseInt(e.target.value) || 1))}
+                      inputProps={{ min: 1 }}
+                      fullWidth
+                    />
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Unité</InputLabel>
+                      <Select
+                        value={durationUnit}
+                        label="Unité"
+                        onChange={(e) => setDurationUnit(e.target.value as 'weeks' | 'months' | 'years')}
+                      >
+                        <MenuItem value="weeks">Semaines</MenuItem>
+                        <MenuItem value="months">Mois</MenuItem>
+                        <MenuItem value="years">Années</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
+                </Box>
+              ) : (
+                <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={fr}>
+                  <DatePicker
+                    label="Date de fin"
+                    value={endDate}
+                    onChange={(newValue) => setEndDate(newValue)}
+                    minDate={dueDate || new Date()}
+                    sx={{ width: '100%' }}
+                  />
+                </LocalizationProvider>
+              )}
+
+              {endDate && endDateMode === 'duration' && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  La tâche se répétera jusqu'au {format(endDate, 'dd/MM/yyyy', { locale: fr })}
+                </Typography>
+              )}
+            </Box>
           )}
 
           <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={fr}>

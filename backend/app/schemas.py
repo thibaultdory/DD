@@ -22,6 +22,7 @@ class TaskUpdate(BaseModel):
     completed: Optional[bool]
     isRecurring: Optional[bool]
     weekdays: Optional[List[int]]  # 1-7 pour lundi-dimanche
+    endDate: Optional[date] = None  # Pour les tâches récurrentes, date de fin optionnelle
 
 class PrivilegeCreate(BaseModel):
     title: str
