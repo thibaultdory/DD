@@ -32,9 +32,29 @@ import {
   Check,
   Undo,
   Edit,
-  Delete
+  Delete,
+  ChevronLeft,
+  ChevronRight,
+  Today,
+  CalendarViewWeek,
+  CalendarMonth
 } from '@mui/icons-material';
-import { format, startOfWeek, addDays, isSameDay, parseISO, isPast, isToday } from 'date-fns';
+import { 
+  format, 
+  startOfWeek, 
+  startOfMonth, 
+  endOfMonth,
+  addDays, 
+  addWeeks,
+  addMonths,
+  subWeeks,
+  subMonths,
+  isSameDay, 
+  isSameMonth,
+  parseISO, 
+  isPast, 
+  isToday 
+} from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -53,6 +73,7 @@ const Calendar: React.FC = () => {
     rules, 
     initialLoading, 
     dataLoading,
+    refreshFamilyData,
     getCalendarTasks
   } = useDataCache();
   
@@ -60,7 +81,8 @@ const Calendar: React.FC = () => {
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
   const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
-  const [selectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
@@ -71,9 +93,84 @@ const Calendar: React.FC = () => {
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
 
-  // Générer les jours de la semaine
-  const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekDays = [...Array(7)].map((_, i) => addDays(startOfCurrentWeek, i));
+  // Navigation functions
+  const handlePreviousPeriod = () => {
+    setSelectedDate(prevDate => 
+      calendarView === 'week' ? subWeeks(prevDate, 1) : subMonths(prevDate, 1)
+    );
+  };
+
+  const handleNextPeriod = () => {
+    setSelectedDate(prevDate => 
+      calendarView === 'week' ? addWeeks(prevDate, 1) : addMonths(prevDate, 1)
+    );
+  };
+
+  const handleToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  const handleCalendarViewChange = (
+    _: React.MouseEvent<HTMLElement>,
+    newView: 'week' | 'month',
+  ) => {
+    if (newView !== null) {
+      setCalendarView(newView);
+    }
+  };
+
+  // Generate days based on current view
+  const getDaysToDisplay = () => {
+    if (calendarView === 'week') {
+      const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
+      return [...Array(7)].map((_, i) => addDays(startOfCurrentWeek, i));
+    } else {
+      // Month view: show full month with padding days
+      const start = startOfMonth(selectedDate);
+      const end = endOfMonth(selectedDate);
+      const startOfFirstWeek = startOfWeek(start, { weekStartsOn: 1 });
+      const endOfLastWeek = addDays(startOfWeek(end, { weekStartsOn: 1 }), 6);
+      
+      const days = [];
+      let currentDay = startOfFirstWeek;
+      while (currentDay <= endOfLastWeek) {
+        days.push(currentDay);
+        currentDay = addDays(currentDay, 1);
+      }
+      return days;
+    }
+  };
+
+  const daysToDisplay = getDaysToDisplay();
+
+  // Refresh data when navigating to a different month to ensure we have tasks for the new period
+  useEffect(() => {
+    if (!authState.currentUser || initialLoading) return;
+    
+    // Check if we've navigated to a significantly different period (different month)
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+    const selectedMonth = selectedDate.getMonth();
+    const selectedYear = selectedDate.getFullYear();
+    
+    // If we're viewing a different month than current, refresh family data to ensure we have all tasks
+    const isSignificantDateChange = 
+      Math.abs((selectedYear - currentYear) * 12 + (selectedMonth - currentMonth)) > 1;
+    
+    if (isSignificantDateChange) {
+      console.log('Significant date change detected, refreshing family data...');
+      // Note: In a future improvement, we should modify the API to accept date ranges
+      // For now, we refresh all data when navigating far from current month
+      if (authState.currentUser) {
+        // Small delay to debounce rapid navigation
+        const timeoutId = setTimeout(() => {
+          refreshFamilyData();
+        }, 300);
+        
+        return () => clearTimeout(timeoutId);
+      }
+    }
+  }, [selectedDate, authState.currentUser, initialLoading, refreshFamilyData]);
 
   useEffect(() => {
     // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
@@ -82,7 +179,7 @@ const Calendar: React.FC = () => {
     }
   }, [authState.currentUser, children, selectedChild, viewMode]);
 
-  // Update displayed data when cache or view mode changes
+  // Update displayed data when cache, view mode, or selected date changes
   useEffect(() => {
     if (!authState.currentUser || initialLoading) return;
 
@@ -119,6 +216,7 @@ const Calendar: React.FC = () => {
     familyViolations, 
     viewMode, 
     selectedChild, 
+    selectedDate, // Added selectedDate to dependencies
     initialLoading,
     getCalendarTasks
   ]);
@@ -236,6 +334,282 @@ const Calendar: React.FC = () => {
 
   console.log('Calendar tasks to display:', tasks);
 
+  // Helper function to render day cell content
+  const renderDayCell = (day: Date) => {
+    const dayTasks = getTasksForDay(day);
+    const dayPrivileges = getPrivilegesForDay(day);
+    const dayViolations = getViolationsForDay(day);
+    const isCurrentMonth = calendarView === 'week' || isSameMonth(day, selectedDate);
+    
+    return (
+      <TableCell 
+        key={day.toString()} 
+        sx={{ 
+          height: calendarView === 'week' ? '200px' : '150px', 
+          verticalAlign: 'top',
+          opacity: isCurrentMonth ? 1 : 0.3,
+          border: isToday(day) ? '2px solid #1976d2' : undefined
+        }}
+      >
+        <Box sx={{ minHeight: '100%', p: 1 }}>
+          {/* Date header for month view */}
+          {calendarView === 'month' && (
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                fontWeight: isToday(day) ? 'bold' : 'normal',
+                color: isCurrentMonth ? 'text.primary' : 'text.disabled'
+              }}
+            >
+              {format(day, 'd')}
+            </Typography>
+          )}
+          
+          {/* Tâches */}
+          {dayTasks.length > 0 && (
+            <Box sx={{ mb: 1 }}>
+              {calendarView === 'week' && (
+                <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Assignment fontSize="small" sx={{ mr: 0.5 }} />
+                  Tâches
+                </Typography>
+              )}
+              {dayTasks.map(task => (
+                <Box 
+                  key={task.id} 
+                  sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: 0.5,
+                    p: calendarView === 'week' ? 0.5 : 0.25,
+                    borderRadius: 1,
+                    bgcolor: task.completed ? 'success.light' : 'error.light',
+                    opacity: task.completed ? 0.7 : 1,
+                    fontSize: calendarView === 'month' ? '0.75rem' : 'inherit'
+                  }}
+                >
+                  {task.completed ? (
+                    <CheckCircle fontSize="small" color="success" sx={{ mr: 0.5 }} />
+                  ) : (
+                    <Cancel fontSize="small" color="error" sx={{ mr: 0.5 }} />
+                  )}
+                  <Typography 
+                    variant={calendarView === 'month' ? 'caption' : 'body2'}
+                    sx={{ 
+                      flexGrow: 1,
+                      textDecoration: task.completed ? 'line-through' : 'none'
+                    }}
+                  >
+                    {calendarView === 'month' && task.title.length > 15 
+                      ? `${task.title.substring(0, 15)}...` 
+                      : task.title
+                    }
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    {viewMode === 'family' && calendarView === 'week' && (
+                      <Chip 
+                        label={getUserName(task.assignedTo[0])} 
+                        size="small" 
+                        sx={{ mr: 0.5 }}
+                      />
+                    )}
+                    <Tooltip title="Voir détails">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleItemClick(task, 'task')}
+                      >
+                        <Info fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    
+                    {/* Show fewer buttons in month view to save space */}
+                    {calendarView === 'week' && (
+                      <>
+                        {/* Edit and Delete buttons for parents who created the task */}
+                        {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                          <>
+                            <Tooltip title="Modifier la tâche">
+                              <IconButton 
+                                size="small" 
+                                onClick={() => handleEditTask(task)}
+                              >
+                                <Edit fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Supprimer la tâche">
+                              <IconButton 
+                                size="small" 
+                                onClick={() => handleDeleteTask(task)}
+                              >
+                                <Delete fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
+                        
+                        {/* Only show completion buttons if user can modify the task */}
+                        {task.canModify !== false && (
+                          <>
+                            {task.completed ? (
+                              <Tooltip title="Marquer comme non terminé">
+                                <IconButton 
+                                  size="small" 
+                                  onClick={() => handleToggleTaskComplete(task)}
+                                >
+                                  <Undo fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            ) : (
+                              <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                                <span>
+                                  <IconButton 
+                                    size="small" 
+                                    onClick={() => handleToggleTaskComplete(task)}
+                                    disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                                  >
+                                    <Check fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {/* Privilèges */}
+          {dayPrivileges.length > 0 && (
+            <Box sx={{ mb: 1 }}>
+              {calendarView === 'week' && (
+                <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
+                  <EmojiEvents fontSize="small" sx={{ mr: 0.5 }} />
+                  Privilèges
+                </Typography>
+              )}
+              {dayPrivileges.map(privilege => (
+                <Box 
+                  key={privilege.id} 
+                  sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: 0.5,
+                    p: calendarView === 'week' ? 0.5 : 0.25,
+                    borderRadius: 1,
+                    bgcolor: privilege.earned ? 'success.light' : 'warning.light'
+                  }}
+                >
+                  <Typography 
+                    variant={calendarView === 'month' ? 'caption' : 'body2'} 
+                    sx={{ flexGrow: 1 }}
+                  >
+                    {calendarView === 'month' && privilege.title.length > 15 
+                      ? `${privilege.title.substring(0, 15)}...` 
+                      : privilege.title
+                    }
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    {viewMode === 'family' && calendarView === 'week' && (
+                      <Chip 
+                        label={getUserName(privilege.assignedTo)} 
+                        size="small" 
+                        sx={{ mr: 0.5 }}
+                      />
+                    )}
+                    <Tooltip title="Voir détails">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleItemClick(privilege, 'privilege')}
+                      >
+                        <Info fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {/* Infractions */}
+          {dayViolations.length > 0 && (
+            <Box>
+              {calendarView === 'week' && (
+                <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Warning fontSize="small" sx={{ mr: 0.5 }} />
+                  Infractions
+                </Typography>
+              )}
+              {dayViolations.map(violation => (
+                <Box 
+                  key={violation.id} 
+                  sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: 0.5,
+                    p: calendarView === 'week' ? 0.5 : 0.25,
+                    borderRadius: 1,
+                    bgcolor: 'error.light'
+                  }}
+                >
+                  <Typography 
+                    variant={calendarView === 'month' ? 'caption' : 'body2'} 
+                    sx={{ flexGrow: 1 }}
+                  >
+                    {calendarView === 'month' && getRuleName(violation.ruleId).length > 15 
+                      ? `${getRuleName(violation.ruleId).substring(0, 15)}...` 
+                      : getRuleName(violation.ruleId)
+                    }
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    {viewMode === 'family' && calendarView === 'week' && (
+                      <Chip 
+                        label={getUserName(violation.childId)} 
+                        size="small" 
+                        sx={{ mr: 0.5 }}
+                      />
+                    )}
+                    <Tooltip title="Voir détails">
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleItemClick(violation, 'violation')}
+                      >
+                        <Info fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {dayTasks.length === 0 && dayPrivileges.length === 0 && dayViolations.length === 0 && (
+            <Typography 
+              variant="caption" 
+              color="text.secondary" 
+              align="center"
+              sx={{ display: calendarView === 'week' ? 'block' : 'none' }}
+            >
+              Aucun événement
+            </Typography>
+          )}
+        </Box>
+      </TableCell>
+    );
+  };
+
+  // Helper function to chunk days into weeks for month view
+  const chunkDaysIntoWeeks = (days: Date[]) => {
+    const weeks = [];
+    for (let i = 0; i < days.length; i += 7) {
+      weeks.push(days.slice(i, i + 7));
+    }
+    return weeks;
+  };
+
   if (initialLoading) {
     return (
       <Layout>
@@ -253,21 +627,82 @@ const Calendar: React.FC = () => {
           Calendrier
         </Typography>
         
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            onChange={handleViewModeChange}
-            aria-label="Mode d'affichage"
+        {/* Navigation Controls */}
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', mb: 3 }}>
+          <IconButton 
+            onClick={handlePreviousPeriod}
             disabled={dataLoading}
+            aria-label="Période précédente"
           >
-            <ToggleButton value="personal" aria-label="Vue personnelle">
-              Vue personnelle
-            </ToggleButton>
-            <ToggleButton value="family" aria-label="Vue familiale">
-              Vue familiale
-            </ToggleButton>
-          </ToggleButtonGroup>
+            <ChevronLeft />
+          </IconButton>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mx: 3 }}>
+            <IconButton 
+              onClick={handleToday}
+              disabled={dataLoading}
+              aria-label="Aujourd'hui"
+              sx={{ mr: 2 }}
+            >
+              <Today />
+            </IconButton>
+            
+            <Typography variant="h6" sx={{ minWidth: '200px', textAlign: 'center' }}>
+              {calendarView === 'week' 
+                ? `Semaine du ${format(daysToDisplay[0], 'd MMM', { locale: fr })} au ${format(daysToDisplay[daysToDisplay.length - 1], 'd MMM yyyy', { locale: fr })}`
+                : format(selectedDate, 'MMMM yyyy', { locale: fr })
+              }
+            </Typography>
+          </Box>
+          
+          <IconButton 
+            onClick={handleNextPeriod}
+            disabled={dataLoading}
+            aria-label="Période suivante"
+          >
+            <ChevronRight />
+          </IconButton>
+        </Box>
+
+        {/* View Controls */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            {/* Calendar View Toggle */}
+            <ToggleButtonGroup
+              value={calendarView}
+              exclusive
+              onChange={handleCalendarViewChange}
+              aria-label="Type de vue"
+              disabled={dataLoading}
+              size="small"
+            >
+              <ToggleButton value="week" aria-label="Vue semaine">
+                <CalendarViewWeek fontSize="small" sx={{ mr: 1 }} />
+                Semaine
+              </ToggleButton>
+              <ToggleButton value="month" aria-label="Vue mois">
+                <CalendarMonth fontSize="small" sx={{ mr: 1 }} />
+                Mois
+              </ToggleButton>
+            </ToggleButtonGroup>
+
+            {/* Family/Personal View Toggle */}
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={handleViewModeChange}
+              aria-label="Mode d'affichage"
+              disabled={dataLoading}
+              size="small"
+            >
+              <ToggleButton value="personal" aria-label="Vue personnelle">
+                Vue personnelle
+              </ToggleButton>
+              <ToggleButton value="family" aria-label="Vue familiale">
+                Vue familiale
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
           
           {dataLoading && (
             <Typography variant="body2" color="text.secondary">
@@ -308,7 +743,8 @@ const Calendar: React.FC = () => {
         <Table>
           <TableHead>
             <TableRow>
-              {weekDays.map((day) => (
+              {/* Week view: show all days in header */}
+              {calendarView === 'week' && daysToDisplay.map((day) => (
                 <TableCell key={day.toString()} align="center">
                   <Typography variant="subtitle1">
                     {format(day, 'EEEE', { locale: fr })}
@@ -318,222 +754,31 @@ const Calendar: React.FC = () => {
                   </Typography>
                 </TableCell>
               ))}
+              
+              {/* Month view: show day names only */}
+              {calendarView === 'month' && ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((dayName) => (
+                <TableCell key={dayName} align="center">
+                  <Typography variant="subtitle1">
+                    {dayName}
+                  </Typography>
+                </TableCell>
+              ))}
             </TableRow>
           </TableHead>
           <TableBody>
-            <TableRow>
-              {weekDays.map((day) => {
-                const dayTasks = getTasksForDay(day);
-                const dayPrivileges = getPrivilegesForDay(day);
-                const dayViolations = getViolationsForDay(day);
-                
-                return (
-                  <TableCell key={day.toString()} sx={{ height: '200px', verticalAlign: 'top' }}>
-                    <Box sx={{ minHeight: '100%', p: 1 }}>
-                      {/* Tâches */}
-                      {dayTasks.length > 0 && (
-                        <Box sx={{ mb: 2 }}>
-                          <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Assignment fontSize="small" sx={{ mr: 0.5 }} />
-                            Tâches
-                          </Typography>
-                          {dayTasks.map(task => (
-                            <Box 
-                              key={task.id} 
-                              sx={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                mb: 0.5,
-                                p: 0.5,
-                                borderRadius: 1,
-                                bgcolor: task.completed ? 'success.light' : 'error.light',
-                                opacity: task.completed ? 0.7 : 1
-                              }}
-                            >
-                              {task.completed ? (
-                                <CheckCircle fontSize="small" color="success" sx={{ mr: 0.5 }} />
-                              ) : (
-                                <Cancel fontSize="small" color="error" sx={{ mr: 0.5 }} />
-                              )}
-                              <Typography 
-                                variant="body2" 
-                                sx={{ 
-                                  flexGrow: 1,
-                                  textDecoration: task.completed ? 'line-through' : 'none'
-                                }}
-                              >
-                                {task.title}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                {viewMode === 'family' && (
-                                  <Chip 
-                                    label={getUserName(task.assignedTo[0])} 
-                                    size="small" 
-                                    sx={{ mr: 0.5 }}
-                                  />
-                                )}
-                                <Tooltip title="Voir détails">
-                                  <IconButton 
-                                    size="small" 
-                                    onClick={() => handleItemClick(task, 'task')}
-                                  >
-                                    <Info fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                
-                                {/* Edit and Delete buttons for parents who created the task */}
-                                {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
-                                  <>
-                                    <Tooltip title="Modifier la tâche">
-                                      <IconButton 
-                                        size="small" 
-                                        onClick={() => handleEditTask(task)}
-                                      >
-                                        <Edit fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Supprimer la tâche">
-                                      <IconButton 
-                                        size="small" 
-                                        onClick={() => handleDeleteTask(task)}
-                                      >
-                                        <Delete fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                  </>
-                                )}
-                                
-                                {/* Only show completion buttons if user can modify the task */}
-                                {task.canModify !== false && (
-                                  <>
-                                    {task.completed ? (
-                                      <Tooltip title="Marquer comme non terminé">
-                                        <IconButton 
-                                          size="small" 
-                                          onClick={() => handleToggleTaskComplete(task)}
-                                        >
-                                          <Undo fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                    ) : (
-                                      <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
-                                        <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
-                                          <IconButton 
-                                            size="small" 
-                                            onClick={() => handleToggleTaskComplete(task)}
-                                            disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
-                                          >
-                                            <Check fontSize="small" />
-                                          </IconButton>
-                                        </span>
-                                      </Tooltip>
-                                    )}
-                                  </>
-                                )}
-                              </Box>
-                            </Box>
-                          ))}
-                        </Box>
-                      )}
-
-                      {/* Privilèges */}
-                      {dayPrivileges.length > 0 && (
-                        <Box sx={{ mb: 2 }}>
-                          <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <EmojiEvents fontSize="small" sx={{ mr: 0.5 }} />
-                            Privilèges
-                          </Typography>
-                          {dayPrivileges.map(privilege => (
-                            <Box 
-                              key={privilege.id} 
-                              sx={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                mb: 0.5,
-                                p: 0.5,
-                                borderRadius: 1,
-                                bgcolor: privilege.earned ? 'success.light' : 'warning.light'
-                              }}
-                            >
-                              <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                                {privilege.title}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                {viewMode === 'family' && (
-                                  <Chip 
-                                    label={getUserName(privilege.assignedTo)} 
-                                    size="small" 
-                                    sx={{ mr: 0.5 }}
-                                  />
-                                )}
-                                <Tooltip title="Voir détails">
-                                  <IconButton 
-                                    size="small" 
-                                    onClick={() => handleItemClick(privilege, 'privilege')}
-                                  >
-                                    <Info fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </Box>
-                            </Box>
-                          ))}
-                        </Box>
-                      )}
-
-                      {/* Infractions */}
-                      {dayViolations.length > 0 && (
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Warning fontSize="small" sx={{ mr: 0.5 }} />
-                            Infractions
-                          </Typography>
-                          {dayViolations.map(violation => (
-                            <Box 
-                              key={violation.id} 
-                              sx={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                mb: 0.5,
-                                p: 0.5,
-                                borderRadius: 1,
-                                bgcolor: 'error.light'
-                              }}
-                            >
-                              <Typography variant="body2" sx={{ flexGrow: 1 }}>
-                                {getRuleName(violation.ruleId)}
-                              </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                {viewMode === 'family' && (
-                                  <Chip 
-                                    label={getUserName(violation.childId)} 
-                                    size="small" 
-                                    sx={{ mr: 0.5 }}
-                                  />
-                                )}
-                                <Tooltip title="Voir détails">
-                                  <IconButton 
-                                    size="small" 
-                                    onClick={() => handleItemClick(violation, 'violation')}
-                                  >
-                                    <Info fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </Box>
-                            </Box>
-                          ))}
-                        </Box>
-                      )}
-
-                      {dayTasks.length === 0 && dayPrivileges.length === 0 && dayViolations.length === 0 && (
-                        <Typography variant="body2" color="text.secondary" align="center">
-                          Aucun événement
-                        </Typography>
-                      )}
-                    </Box>
-                  </TableCell>
-                );
-              })}
-            </TableRow>
+            {calendarView === 'week' ? (
+              /* Week view: single row */
+              <TableRow>
+                {daysToDisplay.map((day) => renderDayCell(day))}
+              </TableRow>
+            ) : (
+              /* Month view: multiple rows for weeks */
+              chunkDaysIntoWeeks(daysToDisplay).map((week, weekIndex) => (
+                <TableRow key={weekIndex}>
+                  {week.map((day) => renderDayCell(day))}
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
