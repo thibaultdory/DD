@@ -78,6 +78,7 @@ const Home: React.FC = () => {
     getUserTasks,
     getUserPrivileges,
     getUserViolations,
+    subscribeToDataChanges,
     rules,
     initialLoading
   } = useDataCache();
@@ -94,6 +95,7 @@ const Home: React.FC = () => {
   const [viewLoading, setViewLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const limit = 5; // Nombre d'éléments par page
   const children = authState.family.filter(user => !user.isParent);
@@ -184,6 +186,7 @@ const Home: React.FC = () => {
     page, 
     tabValue, 
     initialLoading,
+    refreshTrigger,
     getAllTasks,
     getAllPrivileges,
     getAllViolations,
@@ -191,6 +194,24 @@ const Home: React.FC = () => {
     getUserPrivileges,
     getUserViolations
   ]);
+
+  // Subscribe to data changes and refresh only the current tab
+  useEffect(() => {
+    const unsubscribe = subscribeToDataChanges((dataType) => {
+      // Only refresh if the changed data type matches the current tab
+      if (
+        (dataType === 'tasks' && tabValue === 0) ||
+        (dataType === 'privileges' && tabValue === 1) ||
+        (dataType === 'violations' && tabValue === 2)
+      ) {
+        console.log(`${dataType} changed, refreshing current tab...`);
+        // Trigger a re-fetch of current tab data by updating a state that's in the dependency array
+        setRefreshTrigger(prevTrigger => prevTrigger + 1); // This will trigger the fetchData useEffect
+      }
+    });
+
+    return unsubscribe;
+  }, [tabValue, subscribeToDataChanges]);
 
   const handleToggleTaskComplete = async (task: Task) => {
     try {

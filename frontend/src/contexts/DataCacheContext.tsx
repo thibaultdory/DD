@@ -3,6 +3,14 @@ import { Task, Privilege, RuleViolation, Rule } from '../types';
 import { taskService, privilegeService, ruleViolationService, ruleService } from '../services/api';
 import { useAuth } from './AuthContext';
 
+// Event system for notifying components about data changes
+type DataChangeListener = (dataType: 'tasks' | 'privileges' | 'violations') => void;
+const dataChangeListeners: DataChangeListener[] = [];
+
+const notifyDataChange = (dataType: 'tasks' | 'privileges' | 'violations') => {
+  dataChangeListeners.forEach(listener => listener(dataType));
+};
+
 interface DataCache {
   // Family-wide data (all tasks, privileges, violations with permissions) - only for calendar view
   familyTasks: Task[] | null;
@@ -17,6 +25,12 @@ interface DataCache {
   // Cache management
   refreshFamilyData: () => Promise<void>;
   refreshUserData: (userId: string) => Promise<void>;
+  refreshTasks: () => Promise<void>;
+  refreshPrivileges: () => Promise<void>;
+  refreshViolations: () => Promise<void>;
+  
+  // Event subscription for components
+  subscribeToDataChanges: (listener: DataChangeListener) => () => void;
   
   // Paginated data getters - these now use backend pagination
   getUserTasks: (userId: string, page?: number, limit?: number) => Promise<{ tasks: Task[], total: number }>;
@@ -80,6 +94,51 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     }
   };
 
+  const refreshTasks = async () => {
+    if (!authState.currentUser) return;
+    
+    try {
+      setDataLoading(true);
+      const tasksResponse = await taskService.getTasksForCalendar();
+      setFamilyTasks(Array.isArray(tasksResponse) ? tasksResponse : []);
+      notifyDataChange('tasks');
+    } catch (error) {
+      console.error('Error refreshing tasks:', error);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const refreshPrivileges = async () => {
+    if (!authState.currentUser) return;
+    
+    try {
+      setDataLoading(true);
+      const privilegesResponse = await privilegeService.getPrivilegesForCalendar();
+      setFamilyPrivileges(Array.isArray(privilegesResponse) ? privilegesResponse : []);
+      notifyDataChange('privileges');
+    } catch (error) {
+      console.error('Error refreshing privileges:', error);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const refreshViolations = async () => {
+    if (!authState.currentUser) return;
+    
+    try {
+      setDataLoading(true);
+      const violationsResponse = await ruleViolationService.getRuleViolationsForCalendar();
+      setFamilyViolations(Array.isArray(violationsResponse) ? violationsResponse : []);
+      notifyDataChange('violations');
+    } catch (error) {
+      console.error('Error refreshing violations:', error);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
   // Initialize cache when user logs in
   useEffect(() => {
     if (authState.currentUser) {
@@ -100,20 +159,20 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
 
     // Subscribe to task changes
     const unsubscribeTasks = taskService.subscribe(() => {
-      console.log('Task data changed, refreshing cache...');
-      refreshFamilyData();
+      console.log('Task data changed, refreshing tasks...');
+      refreshTasks();
     });
 
     // Subscribe to privilege changes
     const unsubscribePrivileges = privilegeService.subscribe(() => {
-      console.log('Privilege data changed, refreshing cache...');
-      refreshFamilyData();
+      console.log('Privilege data changed, refreshing privileges...');
+      refreshPrivileges();
     });
 
     // Subscribe to violation changes
     const unsubscribeViolations = ruleViolationService.subscribe(() => {
-      console.log('Violation data changed, refreshing cache...');
-      refreshFamilyData();
+      console.log('Violation data changed, refreshing violations...');
+      refreshViolations();
     });
 
     // Cleanup subscriptions on unmount or user change
@@ -223,6 +282,16 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     return familyTasks.filter(task => task.assignedTo.includes(userId || ''));
   };
 
+  const subscribeToDataChanges = (listener: DataChangeListener) => {
+    dataChangeListeners.push(listener);
+    return () => {
+      const index = dataChangeListeners.indexOf(listener);
+      if (index > -1) {
+        dataChangeListeners.splice(index, 1);
+      }
+    };
+  };
+
   const contextValue: DataCache = {
     familyTasks,
     familyPrivileges,
@@ -232,6 +301,10 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     dataLoading,
     refreshFamilyData,
     refreshUserData,
+    refreshTasks,
+    refreshPrivileges,
+    refreshViolations,
+    subscribeToDataChanges,
     getUserTasks,
     getUserPrivileges,
     getUserViolations,
