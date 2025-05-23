@@ -284,6 +284,18 @@ export const taskService = {
     
     const response = await api.get('/tasks/calendar');
     return response.data;
+  },
+
+  // Récupérer les tâches pour la vue calendrier dans une plage de dates
+  async getTasksForCalendarRange(startDate: string, endDate: string): Promise<Task[]> {
+    if (USE_MOCK_DATA) {
+      return mockTasks.filter(task => task.dueDate >= startDate && task.dueDate <= endDate);
+    }
+    
+    const response = await api.get('/tasks/calendar/range', {
+      params: { start_date: startDate, end_date: endDate }
+    });
+    return response.data;
   }
 };
 
@@ -404,6 +416,18 @@ export const privilegeService = {
     }
     
     const response = await api.get('/privileges/calendar');
+    return response.data;
+  },
+
+  // Récupérer les privilèges pour la vue calendrier dans une plage de dates
+  async getPrivilegesForCalendarRange(startDate: string, endDate: string): Promise<Privilege[]> {
+    if (USE_MOCK_DATA) {
+      return mockPrivileges.filter(privilege => privilege.date >= startDate && privilege.date <= endDate);
+    }
+    
+    const response = await api.get('/privileges/calendar/range', {
+      params: { start_date: startDate, end_date: endDate }
+    });
     return response.data;
   }
 };
@@ -526,6 +550,18 @@ export const ruleViolationService = {
     }
     
     const response = await api.get('/rule-violations/calendar');
+    return response.data;
+  },
+
+  // Récupérer les infractions pour la vue calendrier dans une plage de dates
+  async getRuleViolationsForCalendarRange(startDate: string, endDate: string): Promise<RuleViolation[]> {
+    if (USE_MOCK_DATA) {
+      return mockRuleViolations.filter(violation => violation.date >= startDate && violation.date <= endDate);
+    }
+    
+    const response = await api.get('/rule-violations/calendar/range', {
+      params: { start_date: startDate, end_date: endDate }
+    });
     return response.data;
   }
 };
