@@ -23,8 +23,14 @@ from app.routers.wallets import router as wallets_router
 
 app = FastAPI(title="Assistant de Vie Familiale Backend")
 
-# Session middleware for OAuth and CSRF
-app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
+# Session middleware for OAuth and CSRF with proper production configuration
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=settings.secret_key,
+    max_age=86400,  # 24 hours session lifetime
+    same_site="lax",  # Allow cross-site requests for OAuth
+    https_only=settings.frontend_url.startswith("https://"),  # Secure cookies in production
+)
 
 # CORS - Use frontend URL from settings instead of wildcard
 # When using credentials, specific origins must be listed (not wildcard)

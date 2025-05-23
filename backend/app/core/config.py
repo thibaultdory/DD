@@ -1,4 +1,5 @@
 from pydantic import BaseSettings, AnyUrl
+from urllib.parse import urlparse
 
 
 class Settings(BaseSettings):
@@ -19,6 +20,12 @@ class Settings(BaseSettings):
     # Logging settings
     log_level: str = "INFO"
     log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    @property
+    def backend_domain(self) -> str:
+        """Extract domain from backend URL for cookie configuration"""
+        parsed = urlparse(self.base_url)
+        return parsed.hostname or "localhost"
 
     class Config:
         env_file = ".env"

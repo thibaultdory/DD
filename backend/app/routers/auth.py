@@ -5,6 +5,7 @@ from authlib.integrations.starlette_client import OAuth, OAuthError
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from datetime import date
+from urllib.parse import urlencode
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -26,13 +27,18 @@ oauth.register(
 @router.get("/google")
 async def auth_google(request: Request):
     """Initiate Google OAuth2 login flow"""
+    # Clear any existing session data to prevent state conflicts
+    request.session.clear()
+    
     redirect_uri = f"{settings.base_url}/api/auth/google/callback"
+    logger.info(f"Starting OAuth flow with redirect_uri: {redirect_uri}")
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 @router.get("/google/callback")
 async def auth_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """Handle Google OAuth2 callback, create or fetch user, store session"""
     try:
+        logger.info("Processing OAuth callback")
         token = await oauth.google.authorize_access_token(request)
         try:
             user_info = await oauth.google.parse_id_token(request, token)
@@ -41,38 +47,50 @@ async def auth_callback(request: Request, db: AsyncSession = Depends(get_db)):
             user_info = await oauth.google.userinfo(token=token)
     except OAuthError as e:  # Catch exception as e
         logger.error(f"OAuth authentication failed: {e}", exc_info=True)  # Log error
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth authentication failed")
+        # Redirect to frontend with error instead of raising HTTP exception
+        error_params = urlencode({"error": "oauth_failed", "message": f"OAuth authentication failed: {str(e)}"})
+        return RedirectResponse(url=f"{settings.frontend_url}?{error_params}")
 
     email = user_info.get("email")
     if not email:
         logger.error("No email in OAuth token from Google.") # Log error
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No email in token")
+        # Redirect to frontend with error instead of raising HTTP exception
+        error_params = urlencode({"error": "no_email", "message": "No email provided by Google"})
+        return RedirectResponse(url=f"{settings.frontend_url}?{error_params}")
+    
     name = user_info.get("name", email)
     picture = user_info.get("picture")
     # As birth_date is required, set a default placeholder
     birth_date = date(2000, 1, 1)
 
-    # Fetch or create user
-    result = await db.execute(select(User).filter_by(email=email))
-    user = result.scalars().first()
-    if not user:
-        logger.info(f"Creating new user with email: {email}") # Log info
-        user = User(
-            email=email,
-            name=name,
-            birth_date=birth_date,
-            is_parent=False,
-            profile_picture=picture,
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
+    try:
+        # Fetch or create user
+        result = await db.execute(select(User).filter_by(email=email))
+        user = result.scalars().first()
+        if not user:
+            logger.info(f"Creating new user with email: {email}") # Log info
+            user = User(
+                email=email,
+                name=name,
+                birth_date=birth_date,
+                is_parent=False,
+                profile_picture=picture,
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
 
-    # Store user ID in session
-    request.session["user"] = str(user.id)
+        # Store user ID in session
+        request.session["user"] = str(user.id)
 
-    # Redirect to frontend
-    return RedirectResponse(url=settings.frontend_url)
+        # Redirect to frontend
+        return RedirectResponse(url=settings.frontend_url)
+    
+    except Exception as e:
+        logger.error(f"Database error during user creation/login: {e}", exc_info=True)
+        # Redirect to frontend with error instead of raising HTTP exception
+        error_params = urlencode({"error": "database_error", "message": "Failed to process user login"})
+        return RedirectResponse(url=f"{settings.frontend_url}?{error_params}")
 
 @router.get("/me")
 async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
