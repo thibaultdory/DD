@@ -80,7 +80,7 @@ const Calendar: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
-  const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
+  const [viewMode, setViewMode] = useState<'personal' | 'family'>('family');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
@@ -636,21 +636,23 @@ const Calendar: React.FC = () => {
           </IconButton>
           
           <Box sx={{ display: 'flex', alignItems: 'center', mx: 3 }}>
-            <IconButton 
-              onClick={handleToday}
-              disabled={dataLoading}
-              aria-label="Aujourd'hui"
-              sx={{ mr: 2 }}
-            >
-              <Today />
-            </IconButton>
-            
             <Typography variant="h6" sx={{ minWidth: '200px', textAlign: 'center' }}>
               {calendarView === 'week' 
                 ? `Semaine du ${format(daysToDisplay[0], 'd MMM', { locale: fr })} au ${format(daysToDisplay[daysToDisplay.length - 1], 'd MMM yyyy', { locale: fr })}`
                 : format(selectedDate, 'MMMM yyyy', { locale: fr })
               }
             </Typography>
+            
+            <Button
+              onClick={handleToday}
+              disabled={dataLoading}
+              variant="outlined"
+              size="small"
+              startIcon={<Today />}
+              sx={{ ml: 2 }}
+            >
+              {calendarView === 'week' ? 'Cette semaine' : 'Ce mois'}
+            </Button>
           </Box>
           
           <IconButton 
