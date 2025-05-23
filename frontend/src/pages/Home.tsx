@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Typography,
-  Tabs,
-  Tab,
   Box,
   Paper,
   List,
@@ -11,11 +9,10 @@ import {
   ListItemIcon,
   IconButton,
   Chip,
-  Pagination,
   Button,
   Avatar,
   Tooltip,
-  Stack,
+  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -26,7 +23,6 @@ import {
   CheckCircle,
   Cancel,
   Assignment,
-  EmojiEvents,
   Warning,
   Undo,
   Check,
@@ -36,10 +32,11 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useDataCache } from '../contexts/DataCacheContext';
-import { Task, Privilege, RuleViolation } from '../types';
+import { Task, RuleViolation } from '../types';
 import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
-import { isPast, isToday, parseISO } from 'date-fns';
+import { isPast as dateFnIsPast, isToday as dateFnIsToday, parseISO, format, addDays, subDays, isSameDay } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 // Color schemes for children (consistent with calendar)
 const CHILD_COLORS = [
@@ -69,62 +66,42 @@ const TYPE_COLORS = {
   }
 };
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+// Timeline item type
+interface TimelineItem {
+  id: string;
+  type: 'task' | 'violation';
+  date: string;
+  data: Task | RuleViolation;
 }
-
-const TabPanel = (props: TabPanelProps) => {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ pt: 2 }}>
-          {children}
-        </Box>
-      )}
-    </div>
-  );
-};
 
 const Home: React.FC = () => {
   const { authState } = useAuth();
   const navigate = useNavigate();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
   const {
-    getAllTasks,
-    getAllPrivileges,
-    getAllViolations,
-    getUserTasks,
-    getUserPrivileges,
-    getUserViolations,
-    subscribeToDataChanges,
+    familyTasks, 
+    familyViolations, 
     rules,
-    initialLoading
+    initialLoading,
+    refreshFamilyDataForDateRange,
+    getCalendarTasks
   } = useDataCache();
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [privileges, setPrivileges] = useState<Privilege[]>([]);
-  const [violations, setViolations] = useState<RuleViolation[]>([]);
-  const [totalTasks, setTotalTasks] = useState(0);
-  const [totalPrivileges, setTotalPrivileges] = useState(0);
-  const [totalViolations, setTotalViolations] = useState(0);
-  const [tabValue, setTabValue] = useState(0);
-  const [page, setPage] = useState(1);
+  const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
-  const [viewLoading, setViewLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadingPast, setLoadingPast] = useState(false);
+  const [loadingFuture, setLoadingFuture] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
+  // Date range for loaded data
+  const [dateRange, setDateRange] = useState({
+    start: subDays(new Date(), 7), // Start 7 days ago
+    end: addDays(new Date(), 14)   // End 14 days in future
+  });
 
-  const limit = 5; // Nombre d'éléments par page
   const children = authState.family.filter(user => !user.isParent);
 
   // Utility functions for colors (consistent with calendar)
@@ -136,15 +113,11 @@ const Home: React.FC = () => {
   const getTaskColor = (task: Task) => {
     if (task.completed) {
       return TYPE_COLORS.task.completed;
-    } else if (isPast(parseISO(task.dueDate)) && !isToday(parseISO(task.dueDate))) {
+    } else if (dateFnIsPast(parseISO(task.dueDate)) && !dateFnIsToday(parseISO(task.dueDate))) {
       return TYPE_COLORS.task.overdue;
     } else {
       return TYPE_COLORS.task.pending;
     }
-  };
-
-  const getPrivilegeColor = (privilege: Privilege) => {
-    return privilege.earned ? TYPE_COLORS.privilege.earned : TYPE_COLORS.privilege.notEarned;
   };
 
   const getViolationColor = () => {
@@ -155,127 +128,193 @@ const Home: React.FC = () => {
     return fullName.split(' ')[0];
   };
 
+  // Convert cached data to timeline items
+  const createTimelineItems = useCallback((tasks: Task[], violations: RuleViolation[]): TimelineItem[] => {
+    const items: TimelineItem[] = [];
+    
+    // Add tasks
+    tasks.forEach(task => {
+      items.push({
+        id: `task-${task.id}`,
+        type: 'task',
+        date: task.dueDate,
+        data: task
+      });
+    });
+    
+    // Add violations
+    violations.forEach(violation => {
+      items.push({
+        id: `violation-${violation.id}`,
+        type: 'violation',
+        date: violation.date,
+        data: violation
+      });
+    });
+    
+    // Sort by date (newest first)
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, []);
+
+  // Filter data based on selected child
+  const getFilteredData = useCallback(() => {
+    if (!familyTasks || !familyViolations) return { tasks: [], violations: [] };
+    
+    let filteredTasks: Task[] = [];
+    let filteredViolations: RuleViolation[] = [];
+    
+    if (authState.currentUser?.isParent && selectedChild) {
+      // Parent viewing specific child
+      filteredTasks = familyTasks.filter(task => 
+        task.assignedTo.includes(selectedChild)
+      );
+      filteredViolations = familyViolations.filter(violation => 
+        violation.childId === selectedChild && violation.canView !== false
+      );
+    } else if (authState.currentUser?.isParent && !selectedChild) {
+      // Parent viewing all family data
+      filteredTasks = familyTasks;
+      filteredViolations = familyViolations.filter(violation => violation.canView !== false);
+    } else {
+      // Child viewing their own data
+      const userId = authState.currentUser?.id || '';
+      filteredTasks = getCalendarTasks(userId);
+      filteredViolations = familyViolations.filter(violation => 
+        violation.childId === userId && violation.canView !== false
+      );
+    }
+    
+    return { tasks: filteredTasks, violations: filteredViolations };
+  }, [familyTasks, familyViolations, selectedChild, authState.currentUser, getCalendarTasks]);
+
+  // Load initial data and setup timeline
   useEffect(() => {
-    // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
+    if (!authState.currentUser || initialLoading) return;
+    
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        const startDateStr = format(dateRange.start, 'yyyy-MM-dd');
+        const endDateStr = format(dateRange.end, 'yyyy-MM-dd');
+        
+        await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      } catch (error) {
+        console.error('Error loading initial timeline data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadInitialData();
+  }, [authState.currentUser, initialLoading, refreshFamilyDataForDateRange, dateRange]);
+
+  // Update timeline when data or filters change
+  useEffect(() => {
+    const { tasks, violations } = getFilteredData();
+    const items = createTimelineItems(tasks, violations);
+    setTimelineItems(items);
+  }, [familyTasks, familyViolations, selectedChild, createTimelineItems, getFilteredData]);
+
+  // Auto-scroll to today's items on initial load
+  useEffect(() => {
+    if (timelineItems.length > 0 && !loading) {
+      const timer = setTimeout(() => {
+        const todayItem = timelineItems.find(item => 
+          isSameDay(parseISO(item.date), new Date())
+        );
+        
+        if (todayItem && scrollContainerRef.current) {
+          const itemElement = scrollContainerRef.current.querySelector(`[data-item-id="${todayItem.id}"]`);
+          if (itemElement) {
+            itemElement.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'center' 
+            });
+          }
+        }
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [timelineItems, loading]);
+
+  // Load more data in past direction
+  const loadPastData = useCallback(async () => {
+    if (loadingPast) return;
+    
+    setLoadingPast(true);
+    try {
+      const newStart = subDays(dateRange.start, 7);
+      const startDateStr = format(newStart, 'yyyy-MM-dd');
+      const endDateStr = format(dateRange.start, 'yyyy-MM-dd');
+      
+      await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      setDateRange(prev => ({ ...prev, start: newStart }));
+    } catch (error) {
+      console.error('Error loading past data:', error);
+    } finally {
+      setLoadingPast(false);
+    }
+  }, [loadingPast, dateRange.start, refreshFamilyDataForDateRange]);
+
+  // Load more data in future direction
+  const loadFutureData = useCallback(async () => {
+    if (loadingFuture) return;
+    
+    setLoadingFuture(true);
+    try {
+      const newEnd = addDays(dateRange.end, 7);
+      const startDateStr = format(dateRange.end, 'yyyy-MM-dd');
+      const endDateStr = format(newEnd, 'yyyy-MM-dd');
+      
+      await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      setDateRange(prev => ({ ...prev, end: newEnd }));
+    } catch (error) {
+      console.error('Error loading future data:', error);
+    } finally {
+      setLoadingFuture(false);
+    }
+  }, [loadingFuture, dateRange.end, refreshFamilyDataForDateRange]);
+
+  // Scroll event handler for infinite scroll
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    
+    // Near top - load past data
+    if (scrollTop < 200 && !loadingPast) {
+      loadPastData();
+    }
+    
+    // Near bottom - load future data
+    if (scrollHeight - scrollTop - clientHeight < 200 && !loadingFuture) {
+      loadFutureData();
+    }
+  }, [loadingPast, loadingFuture, loadPastData, loadFutureData]);
+
+  // Child selection for parents
+  useEffect(() => {
     if (authState.currentUser?.isParent && children.length > 0 && !selectedChild) {
       setSelectedChild(children[0].id);
     }
   }, [authState.currentUser, children, selectedChild]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!authState.currentUser || initialLoading) return;
-      
-      setViewLoading(true);
-      try {
-        let tasksData: Task[] = [];
-        let privilegesData: Privilege[] = [];
-        let violationsData: RuleViolation[] = [];
-        let tasksTotal = 0;
-        let privilegesTotal = 0;
-        let violationsTotal = 0;
+  const handleChildSelect = (childId: string) => {
+    setSelectedChild(childId);
+  };
 
-        // Fetch data based on current view and tab
-        if (tabValue === 0) { // Tasks tab
-          if (authState.currentUser.isParent && selectedChild) {
-            // Parent viewing specific child's tasks
-            const result = await getUserTasks(selectedChild, page, limit);
-            tasksData = result.tasks;
-            tasksTotal = result.total;
-          } else if (authState.currentUser.isParent && !selectedChild) {
-            // Parent viewing all family tasks
-            const result = await getAllTasks(page, limit);
-            tasksData = result.tasks;
-            tasksTotal = result.total;
-          } else {
-            // Child viewing their own tasks
-            const result = await getUserTasks(authState.currentUser.id, page, limit);
-            tasksData = result.tasks;
-            tasksTotal = result.total;
-          }
-        } else if (tabValue === 1) { // Privileges tab
-          if (authState.currentUser.isParent && selectedChild) {
-            const result = await getUserPrivileges(selectedChild, page, limit);
-            privilegesData = result.privileges;
-            privilegesTotal = result.total;
-          } else if (authState.currentUser.isParent && !selectedChild) {
-            const result = await getAllPrivileges(page, limit);
-            privilegesData = result.privileges;
-            privilegesTotal = result.total;
-          } else {
-            const result = await getUserPrivileges(authState.currentUser.id, page, limit);
-            privilegesData = result.privileges;
-            privilegesTotal = result.total;
-          }
-        } else if (tabValue === 2) { // Violations tab
-          if (authState.currentUser.isParent && selectedChild) {
-            const result = await getUserViolations(selectedChild, page, limit);
-            violationsData = result.violations;
-            violationsTotal = result.total;
-          } else if (authState.currentUser.isParent && !selectedChild) {
-            const result = await getAllViolations(page, limit);
-            violationsData = result.violations;
-            violationsTotal = result.total;
-          } else {
-            const result = await getUserViolations(authState.currentUser.id, page, limit);
-            violationsData = result.violations;
-            violationsTotal = result.total;
-          }
-        }
-
-        setTasks(tasksData);
-        setTotalTasks(tasksTotal);
-        setPrivileges(privilegesData);
-        setTotalPrivileges(privilegesTotal);
-        setViolations(violationsData);
-        setTotalViolations(violationsTotal);
-      } finally {
-        setViewLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [
-    authState.currentUser, 
-    selectedChild, 
-    page, 
-    tabValue, 
-    initialLoading,
-    refreshTrigger,
-    getAllTasks,
-    getAllPrivileges,
-    getAllViolations,
-    getUserTasks,
-    getUserPrivileges,
-    getUserViolations
-  ]);
-
-  // Subscribe to data changes and refresh only the current tab
-  useEffect(() => {
-    const unsubscribe = subscribeToDataChanges((dataType) => {
-      // Only refresh if the changed data type matches the current tab
-      if (
-        (dataType === 'tasks' && tabValue === 0) ||
-        (dataType === 'privileges' && tabValue === 1) ||
-        (dataType === 'violations' && tabValue === 2)
-      ) {
-        console.log(`${dataType} changed, refreshing current tab...`);
-        // Trigger a re-fetch of current tab data by updating a state that's in the dependency array
-        setRefreshTrigger(prevTrigger => prevTrigger + 1); // This will trigger the fetchData useEffect
-      }
-    });
-
-    return unsubscribe;
-  }, [tabValue, subscribeToDataChanges]);
-
+  // Task management functions
   const handleToggleTaskComplete = async (task: Task) => {
+    if (task.canModify === false) {
+      console.warn('User does not have permission to modify this task');
+      return;
+    }
+    
     try {
       if (task.completed) {
         await taskService.uncompleteTask(task.id);
       } else {
         await taskService.completeTask(task.id);
       }
-      // La mise à jour des tâches sera gérée par l'abonnement du cache
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
@@ -294,12 +333,10 @@ const Home: React.FC = () => {
     if (!taskToDelete) return;
 
     try {
-      // For recurring tasks, ask if they want to delete future instances
       const deleteFuture = taskToDelete.isRecurring && !taskToDelete.parentTaskId;
       await taskService.deleteTask(taskToDelete.id, deleteFuture);
       setDeleteDialogOpen(false);
       setTaskToDelete(null);
-      // Data will be updated via cache subscription
     } catch (error) {
       console.error('Error deleting task:', error);
     }
@@ -310,37 +347,33 @@ const Home: React.FC = () => {
     setTaskToDelete(null);
   };
 
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
-    setPage(1); // Réinitialiser la page lors du changement d'onglet
-  };
-
-  const handlePageChange = (_: React.ChangeEvent<unknown>, value: number) => {
-    setPage(value);
-  };
-
-  const handleChildSelect = (childId: string) => {
-    setSelectedChild(childId);
-  };
-
-  // Fonction pour obtenir le nom de la règle à partir de son ID
+  // Utility functions
   const getRuleName = (ruleId: string): string => {
     const rule = rules?.find(r => r.id === ruleId);
     return rule ? rule.description : ruleId;
   };
 
-  // Fonction pour obtenir le nom de l'utilisateur à partir de son ID
   const getUserName = (userId: string): string => {
     const user = authState.family.find(u => u.id === userId);
     return user ? user.name : 'Inconnu';
   };
 
-  console.log('Tasks to display:', tasks);
+  // Group timeline items by date
+  const groupedItems = timelineItems.reduce((groups, item) => {
+    const date = item.date;
+    if (!groups[date]) {
+      groups[date] = [];
+    }
+    groups[date].push(item);
+    return groups;
+  }, {} as Record<string, TimelineItem[]>);
 
   if (initialLoading) {
     return (
       <Layout>
-        <Typography>Chargement...</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+          <CircularProgress />
+        </Box>
       </Layout>
     );
   }
@@ -373,15 +406,15 @@ const Home: React.FC = () => {
                     sx={{ 
                       width: 40, 
                       height: 40, 
-                      cursor: viewLoading ? 'default' : 'pointer',
+                      cursor: loading ? 'default' : 'pointer',
                       border: selectedChild === child.id ? `3px solid ${childColorScheme.primary}` : `2px solid ${childColorScheme.light}`,
-                      opacity: viewLoading ? 0.5 : (selectedChild === child.id ? 1 : 0.7),
+                      opacity: loading ? 0.5 : (selectedChild === child.id ? 1 : 0.7),
                       bgcolor: childColorScheme.light,
                       color: childColorScheme.primary,
                       fontWeight: 'bold',
                       transition: 'all 0.2s ease'
                     }}
-                    onClick={viewLoading ? undefined : () => handleChildSelect(child.id)}
+                    onClick={loading ? undefined : () => handleChildSelect(child.id)}
                   >
                     {!child.profilePicture && getFirstName(child.name).charAt(0).toUpperCase()}
                   </Avatar>
@@ -389,7 +422,7 @@ const Home: React.FC = () => {
               );
             })}
           </Box>
-          {viewLoading && (
+          {loading && (
             <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
               Mise à jour...
             </Typography>
@@ -430,446 +463,334 @@ const Home: React.FC = () => {
         </Box>
       )}
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs 
-          value={tabValue} 
-          onChange={handleTabChange} 
-          aria-label="basic tabs example"
-        >
-          <Tab 
-            label="Tâches" 
-            icon={<Assignment />} 
-            iconPosition="start" 
-            disabled={viewLoading}
-          />
-          <Tab 
-            label="Privilèges" 
-            icon={<EmojiEvents />} 
-            iconPosition="start" 
-            disabled={viewLoading}
-          />
-          <Tab 
-            label="Infractions" 
-            icon={<Warning />} 
-            iconPosition="start" 
-            disabled={viewLoading}
-          />
-        </Tabs>
-      </Box>
+      {/* Actions Bar */}
+      {authState.currentUser?.isParent && (
+        <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<Assignment />}
+            onClick={() => navigate('/tasks/new')}
+          >
+            Ajouter une tâche
+          </Button>
+          <Button 
+            variant="outlined" 
+            startIcon={<Warning />}
+            onClick={() => navigate('/violations/new')}
+          >
+            Signaler une infraction
+          </Button>
+        </Box>
+      )}
 
-      {/* Onglet des tâches */}
-      <TabPanel value={tabValue} index={0}>
-        <Paper sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">
-              <Assignment sx={{ verticalAlign: 'middle', mr: 1 }} />
-              {authState.currentUser?.isParent && selectedChild 
-                ? `Tâches de ${getUserName(selectedChild)}` 
-                : 'Mes tâches'}
+      {/* Timeline Container */}
+      <Paper sx={{ p: 0, overflow: 'hidden' }}>
+        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
+          <Typography variant="h6">
+            Timeline des événements
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Tâches et infractions centrées autour d'aujourd'hui
+          </Typography>
+        </Box>
+
+        {loading && timelineItems.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <CircularProgress />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Chargement de la timeline...
             </Typography>
-            {authState.currentUser?.isParent && (
-              <Button 
-                variant="outlined" 
-                size="small" 
-                onClick={() => navigate('/tasks/new')}
-              >
-                Ajouter
-              </Button>
-            )}
           </Box>
-          
-
-          {tasks.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              Aucune tâche à afficher
+        ) : timelineItems.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography variant="body1" color="text.secondary">
+              Aucun événement trouvé dans cette période
             </Typography>
-          ) : (
-            <List sx={{ p: 0 }}>
-              {tasks.map((task) => {
-                const taskColor = getTaskColor(task);
-                const childColorScheme = task.assignedTo[0] ? getChildColorScheme(task.assignedTo[0]) : CHILD_COLORS[0];
-                
-                return (
-                  <React.Fragment key={task.id}>
-                    <ListItem
-                      sx={{
-                        mb: 1,
-                        borderRadius: 1,
-                        bgcolor: taskColor.light,
-                        border: `1px solid ${childColorScheme.primary}`,
-                        borderLeft: `4px solid ${childColorScheme.primary}`,
-                        '&:hover': {
-                          transform: 'translateY(-1px)',
-                          boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
-                        },
-                        transition: 'all 0.2s ease'
-                      }}
-                      secondaryAction={
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          {/* Edit and Delete buttons for parents */}
-                          {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
-                            <>
-                              <Tooltip title="Modifier la tâche">
-                                <IconButton
-                                  edge="end"
-                                  aria-label="edit"
-                                  onClick={() => handleEditTask(task)}
-                                  size="small"
-                                >
-                                  <Edit />
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Supprimer la tâche">
-                                <IconButton
-                                  edge="end"
-                                  aria-label="delete"
-                                  onClick={() => handleDeleteTask(task)}
-                                  size="small"
-                                >
-                                  <Delete />
-                                </IconButton>
-                              </Tooltip>
-                            </>
-                          )}
-                          
-                          {/* Complete/Uncomplete button */}
-                          {task.completed ? (
-                            <Tooltip title="Marquer comme non terminé">
-                              <IconButton
-                                edge="end"
-                                aria-label="uncomplete"
-                                onClick={() => handleToggleTaskComplete(task)}
-                              >
-                                <Undo />
-                              </IconButton>
-                            </Tooltip>
-                          ) : (
-                            <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
-                              <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
-                                <IconButton
-                                  edge="end"
-                                  aria-label="complete"
-                                  onClick={() => handleToggleTaskComplete(task)}
-                                  disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
-                                >
-                                  <Check />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          )}
-                        </Box>
-                      }
-                    >
-                      <ListItemIcon>
-                        {task.completed ? (
-                          <CheckCircle sx={{ color: taskColor.bg }} />
-                        ) : (
-                          <Cancel sx={{ color: taskColor.bg }} />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography
-                              variant="body1"
-                              sx={{
-                                textDecoration: task.completed ? 'line-through' : 'none',
-                                fontWeight: 500,
-                                color: 'text.primary'
-                              }}
-                            >
-                              {task.title}
-                            </Typography>
-                            {/* Child indicator */}
-                            {authState.currentUser?.isParent && !selectedChild && (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box
-                                  sx={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    bgcolor: childColorScheme.primary,
-                                    flexShrink: 0
-                                  }}
-                                />
-                                <Typography 
-                                  variant="caption"
-                                  sx={{ 
-                                    color: childColorScheme.primary,
-                                    fontWeight: 600
-                                  }}
-                                >
-                                  {getFirstName(getUserName(task.assignedTo[0]))}
-                                </Typography>
-                              </Box>
-                            )}
-                          </Box>
-                        }
-                        secondary={
-                          <>
-                            {task.description && <span>{task.description}<br /></span>}
-                            <span>Échéance: {task.dueDate}</span>
-                          </>
-                        }
-                      />
-                    </ListItem>
-                  </React.Fragment>
-                );
-              })}
-            </List>
-          )}
-          {tasks.length > 0 && (
-            <Stack spacing={2} alignItems="center" sx={{ mt: 2 }}>
-              <Pagination
-                count={Math.ceil(totalTasks / limit)}
-                page={page}
-                onChange={handlePageChange}
-                color="primary"
-              />
-            </Stack>
-          )}
-        </Paper>
-      </TabPanel>
-
-      {/* Onglet des privilèges */}
-      <TabPanel value={tabValue} index={1}>
-        <Paper sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">
-              <EmojiEvents sx={{ verticalAlign: 'middle', mr: 1 }} />
-              {authState.currentUser?.isParent && selectedChild 
-                ? `Privilèges de ${getUserName(selectedChild)}` 
-                : 'Mes privilèges'}
-            </Typography>
-            {authState.currentUser?.isParent && (
-              <Button 
-                variant="outlined" 
-                size="small" 
-                onClick={() => navigate('/privileges/new')}
-              >
-                Ajouter
-              </Button>
-            )}
           </Box>
-          
-          {privileges.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              Aucun privilège à afficher
-            </Typography>
-          ) : (
-            <List sx={{ p: 0 }}>
-              {privileges.map((privilege) => {
-                const privilegeColor = getPrivilegeColor(privilege);
-                const childColorScheme = getChildColorScheme(privilege.assignedTo);
-                
+        ) : (
+          <Box
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            sx={{
+              height: 'calc(100vh - 350px)',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              // Hide scrollbar while maintaining scroll functionality
+              '&::-webkit-scrollbar': {
+                display: 'none',
+              },
+              '-ms-overflow-style': 'none',  // IE and Edge
+              'scrollbar-width': 'none',     // Firefox
+            }}
+          >
+            {/* Loading indicator for past data */}
+            {loadingPast && (
+              <Box sx={{ p: 2, textAlign: 'center' }}>
+                <CircularProgress size={20} />
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  Chargement des données passées...
+                </Typography>
+              </Box>
+            )}
+
+            {/* Timeline Items */}
+            {Object.keys(groupedItems)
+              .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+              .map(date => {
+                const dayItems = groupedItems[date];
+                const isToday = isSameDay(parseISO(date), new Date());
+                const parsedDate = parseISO(date);
+
                 return (
-                  <React.Fragment key={privilege.id}>
-                    <ListItem
-                      sx={{
-                        mb: 1,
-                        borderRadius: 1,
-                        bgcolor: privilegeColor.light,
-                        border: `1px solid ${childColorScheme.primary}`,
-                        borderLeft: `4px solid ${childColorScheme.primary}`,
-                        '&:hover': {
-                          transform: 'translateY(-1px)',
-                          boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
-                        },
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <ListItemIcon>
-                        <EmojiEvents sx={{ color: privilegeColor.bg }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography
-                              variant="body1"
-                              sx={{
-                                fontWeight: 500,
-                                color: 'text.primary'
-                              }}
-                            >
-                              {privilege.title}
-                            </Typography>
-                            {/* Child indicator */}
-                            {authState.currentUser?.isParent && !selectedChild && (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box
-                                  sx={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    bgcolor: childColorScheme.primary,
-                                    flexShrink: 0
-                                  }}
-                                />
-                                <Typography 
-                                  variant="caption"
-                                  sx={{ 
-                                    color: childColorScheme.primary,
-                                    fontWeight: 600
-                                  }}
-                                >
-                                  {getFirstName(getUserName(privilege.assignedTo))}
-                                </Typography>
-                              </Box>
-                            )}
-                          </Box>
-                        }
-                        secondary={
-                          <>
-                            {privilege.description && <span>{privilege.description}<br /></span>}
-                            <span>Date: {privilege.date}</span>
-                          </>
-                        }
-                      />
-                      <Chip 
-                        label={privilege.earned ? "Mérité" : "Non mérité"} 
-                        sx={{
-                          bgcolor: privilegeColor.bg,
-                          color: privilegeColor.color,
-                          fontWeight: 500
+                  <Box key={date} sx={{ mb: 2 }}>
+                    {/* Date Header */}
+                    <Box sx={{ 
+                      p: 2, 
+                      bgcolor: isToday ? 'primary.light' : 'grey.100',
+                      borderTop: isToday ? '2px solid' : '1px solid',
+                      borderColor: isToday ? 'primary.main' : 'grey.300',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 1
+                    }}>
+                      <Typography 
+                        variant="h6" 
+                        sx={{ 
+                          color: isToday ? 'primary.main' : 'text.primary',
+                          fontWeight: isToday ? 'bold' : '600'
                         }}
-                        size="small" 
-                      />
-                    </ListItem>
-                  </React.Fragment>
-                );
-              })}
-            </List>
-          )}
-          {privileges.length > 0 && (
-            <Stack spacing={2} alignItems="center" sx={{ mt: 2 }}>
-              <Pagination
-                count={Math.ceil(totalPrivileges / limit)}
-                page={page}
-                onChange={handlePageChange}
-                color="primary"
-              />
-            </Stack>
-          )}
-        </Paper>
-      </TabPanel>
+                      >
+                        {isToday ? 'Aujourd\'hui' : format(parsedDate, 'EEEE d MMMM yyyy', { locale: fr })}
+                        {isToday && (
+                          <Chip 
+                            label="AUJOURD'HUI" 
+                            size="small" 
+                            sx={{ 
+                              ml: 2, 
+                              bgcolor: 'primary.main', 
+                              color: 'white',
+                              fontWeight: 'bold'
+                            }} 
+                          />
+                        )}
+                      </Typography>
+                    </Box>
 
-      {/* Onglet des infractions */}
-      <TabPanel value={tabValue} index={2}>
-        <Paper sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">
-              <Warning sx={{ verticalAlign: 'middle', mr: 1 }} />
-              {authState.currentUser?.isParent && selectedChild 
-                ? `Infractions de ${getUserName(selectedChild)}` 
-                : 'Mes infractions'}
-            </Typography>
-            {authState.currentUser?.isParent && (
-              <Button 
-                variant="outlined" 
-                size="small" 
-                onClick={() => navigate('/violations/new')}
-              >
-                Ajouter
-              </Button>
-            )}
-          </Box>
-          
-          {violations.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              Aucune infraction à afficher
-            </Typography>
-          ) : (
-            <List sx={{ p: 0 }}>
-              {violations.map((violation) => {
-                const violationColor = getViolationColor();
-                const childColorScheme = getChildColorScheme(violation.childId);
-                
-                return (
-                  <React.Fragment key={violation.id}>
-                    <ListItem
-                      sx={{
-                        mb: 1,
-                        borderRadius: 1,
-                        bgcolor: violationColor.light,
-                        border: `1px solid ${childColorScheme.primary}`,
-                        borderLeft: `4px solid ${childColorScheme.primary}`,
-                        '&:hover': {
-                          transform: 'translateY(-1px)',
-                          boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
-                        },
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      <ListItemIcon>
-                        <Warning sx={{ color: violationColor.bg }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography
-                              variant="body1"
+                    {/* Day Items */}
+                    <List sx={{ p: 0 }}>
+                      {dayItems.map(item => {
+                        if (item.type === 'task') {
+                          const task = item.data as Task;
+                          const taskColor = getTaskColor(task);
+                          const childColorScheme = task.assignedTo[0] ? getChildColorScheme(task.assignedTo[0]) : CHILD_COLORS[0];
+
+                          return (
+                            <ListItem
+                              key={item.id}
+                              data-item-id={item.id}
                               sx={{
-                                fontWeight: 500,
-                                color: 'text.primary'
+                                mb: 1,
+                                mx: 1,
+                                borderRadius: 2,
+                                bgcolor: taskColor.light,
+                                border: `1px solid ${childColorScheme.primary}`,
+                                borderLeft: `4px solid ${childColorScheme.primary}`,
+                                '&:hover': {
+                                  transform: 'translateY(-1px)',
+                                  boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
+                                },
+                                transition: 'all 0.2s ease'
+                              }}
+                              secondaryAction={
+                                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                  {/* Task action buttons */}
+                                  {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                                    <>
+                                      <Tooltip title="Modifier la tâche">
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => handleEditTask(task)}
+                                        >
+                                          <Edit fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Supprimer la tâche">
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => handleDeleteTask(task)}
+                                        >
+                                          <Delete fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </>
+                                  )}
+                                  
+                                  {/* Complete/Uncomplete button */}
+                                  {task.canModify !== false && (
+                                    <>
+                                      {task.completed ? (
+                                        <Tooltip title="Marquer comme non terminé">
+                                          <IconButton
+                                            size="small"
+                                            onClick={() => handleToggleTaskComplete(task)}
+                                          >
+                                            <Undo fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                      ) : (
+                                        <Tooltip title={!(dateFnIsPast(parseISO(task.dueDate)) || dateFnIsToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                                          <span>
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => handleToggleTaskComplete(task)}
+                                              disabled={!(dateFnIsPast(parseISO(task.dueDate)) || dateFnIsToday(parseISO(task.dueDate)))}
+                                            >
+                                              <Check fontSize="small" />
+                                            </IconButton>
+                                          </span>
+                                        </Tooltip>
+                                      )}
+                                    </>
+                                  )}
+                                </Box>
+                              }
+                            >
+                              <ListItemIcon>
+                                {task.completed ? (
+                                  <CheckCircle sx={{ color: taskColor.bg }} />
+                                ) : (
+                                  <Cancel sx={{ color: taskColor.bg }} />
+                                )}
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Typography
+                                      variant="body1"
+                                      sx={{
+                                        textDecoration: task.completed ? 'line-through' : 'none',
+                                        fontWeight: 600,
+                                        color: 'text.primary'
+                                      }}
+                                    >
+                                      {task.title}
+                                    </Typography>
+                                    {/* Child indicator */}
+                                    {authState.currentUser?.isParent && !selectedChild && (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                        <Box
+                                          sx={{
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: '50%',
+                                            bgcolor: childColorScheme.primary,
+                                            flexShrink: 0
+                                          }}
+                                        />
+                                        <Typography 
+                                          variant="caption"
+                                          sx={{ 
+                                            color: childColorScheme.primary,
+                                            fontWeight: 600
+                                          }}
+                                        >
+                                          {getFirstName(getUserName(task.assignedTo[0]))}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                }
+                                secondary={task.description}
+                              />
+                            </ListItem>
+                          );
+                        } else if (item.type === 'violation') {
+                          const violation = item.data as RuleViolation;
+                          const violationColor = getViolationColor();
+                          const childColorScheme = getChildColorScheme(violation.childId);
+
+                          return (
+                            <ListItem
+                              key={item.id}
+                              data-item-id={item.id}
+                              sx={{
+                                mb: 1,
+                                mx: 1,
+                                borderRadius: 2,
+                                bgcolor: violationColor.light,
+                                border: `1px solid ${childColorScheme.primary}`,
+                                borderLeft: `4px solid ${childColorScheme.primary}`,
+                                '&:hover': {
+                                  transform: 'translateY(-1px)',
+                                  boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
+                                },
+                                transition: 'all 0.2s ease'
                               }}
                             >
-                              {getRuleName(violation.ruleId)}
-                            </Typography>
-                            {/* Child indicator */}
-                            {authState.currentUser?.isParent && !selectedChild && (
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <Box
-                                  sx={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    bgcolor: childColorScheme.primary,
-                                    flexShrink: 0
-                                  }}
-                                />
-                                <Typography 
-                                  variant="caption"
-                                  sx={{ 
-                                    color: childColorScheme.primary,
-                                    fontWeight: 600
-                                  }}
-                                >
-                                  {getFirstName(getUserName(violation.childId))}
-                                </Typography>
-                              </Box>
-                            )}
-                          </Box>
+                              <ListItemIcon>
+                                <Warning sx={{ color: violationColor.bg }} />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Typography
+                                      variant="body1"
+                                      sx={{
+                                        fontWeight: 600,
+                                        color: 'text.primary'
+                                      }}
+                                    >
+                                      {getRuleName(violation.ruleId)}
+                                    </Typography>
+                                    {/* Child indicator */}
+                                    {authState.currentUser?.isParent && !selectedChild && (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                        <Box
+                                          sx={{
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: '50%',
+                                            bgcolor: childColorScheme.primary,
+                                            flexShrink: 0
+                                          }}
+                                        />
+                                        <Typography 
+                                          variant="caption"
+                                          sx={{ 
+                                            color: childColorScheme.primary,
+                                            fontWeight: 600
+                                          }}
+                                        >
+                                          {getFirstName(getUserName(violation.childId))}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                  </Box>
+                                }
+                                secondary={violation.description}
+                              />
+                            </ListItem>
+                          );
                         }
-                        secondary={
-                          <>
-                            <span>Date: {violation.date}</span>
-                            {violation.description && (
-                              <>
-                                <br />
-                                <span>Description: {violation.description}</span>
-                              </>
-                            )}
-                          </>
-                        }
-                      />
-                    </ListItem>
-                  </React.Fragment>
+                        return null;
+                      })}
+                    </List>
+                  </Box>
                 );
               })}
-            </List>
-          )}
-          {violations.length > 0 && (
-            <Stack spacing={2} alignItems="center" sx={{ mt: 2 }}>
-              <Pagination
-                count={Math.ceil(totalViolations / limit)}
-                page={page}
-                onChange={handlePageChange}
-                color="primary"
-              />
-            </Stack>
-          )}
-        </Paper>
-      </TabPanel>
+
+            {/* Loading indicator for future data */}
+            {loadingFuture && (
+              <Box sx={{ p: 2, textAlign: 'center' }}>
+                <CircularProgress size={20} />
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  Chargement des données futures...
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+      </Paper>
       
       {/* Delete Confirmation Dialog */}
       <Dialog
