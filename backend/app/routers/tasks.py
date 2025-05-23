@@ -415,3 +415,44 @@ async def get_tasks_for_calendar(current_user: User = Depends(get_current_user),
         serialized_tasks.append(task_data)
     
     return serialized_tasks
+
+@router.get("/tasks/calendar/range")
+async def get_tasks_for_calendar_range(
+    start_date: date = Query(..., description="Start date for the range (YYYY-MM-DD)"),
+    end_date: date = Query(..., description="End date for the range (YYYY-MM-DD)"),
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get tasks for calendar view within a specific date range.
+    More efficient than fetching all tasks when only viewing a specific period.
+    """
+    # Validate date range
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date must be before or equal to end_date"
+        )
+    
+    # Get tasks within the date range
+    stmt = select(Task).where(
+        Task.due_date >= start_date,
+        Task.due_date <= end_date
+    )
+    result = await db.execute(stmt)
+    tasks = result.scalars().all()
+    
+    serialized_tasks = []
+    for task in tasks:
+        task_data = await serialize_task(task, db)
+        # Add permission flag for frontend
+        if current_user.is_parent:
+            task_data["canModify"] = True
+        else:
+            # Check if current user is assigned to this task
+            is_assigned = str(current_user.id) in task_data["assignedTo"]
+            task_data["canModify"] = is_assigned
+        
+        serialized_tasks.append(task_data)
+    
+    return serialized_tasks

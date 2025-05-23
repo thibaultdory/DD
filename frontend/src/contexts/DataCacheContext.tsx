@@ -24,6 +24,7 @@ interface DataCache {
   
   // Cache management
   refreshFamilyData: () => Promise<void>;
+  refreshFamilyDataForDateRange: (startDate: string, endDate: string) => Promise<void>;
   refreshUserData: (userId: string) => Promise<void>;
   refreshTasks: () => Promise<void>;
   refreshPrivileges: () => Promise<void>;
@@ -91,6 +92,31 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
       console.error('Error refreshing family data:', error);
     } finally {
       setInitialLoading(false);
+    }
+  };
+
+  const refreshFamilyDataForDateRange = async (startDate: string, endDate: string) => {
+    if (!authState.currentUser) return;
+    
+    try {
+      setDataLoading(true);
+      
+      // Fetch data for the specific date range in parallel
+      const [rulesResponse, tasksResponse, privilegesResponse, violationsResponse] = await Promise.all([
+        ruleService.getRules(), // Rules don't change with date range
+        taskService.getTasksForCalendarRange(startDate, endDate),
+        privilegeService.getPrivilegesForCalendarRange(startDate, endDate),
+        ruleViolationService.getRuleViolationsForCalendarRange(startDate, endDate)
+      ]);
+
+      setRules(rulesResponse);
+      setFamilyTasks(Array.isArray(tasksResponse) ? tasksResponse : []);
+      setFamilyPrivileges(Array.isArray(privilegesResponse) ? privilegesResponse : []);
+      setFamilyViolations(Array.isArray(violationsResponse) ? violationsResponse : []);
+    } catch (error) {
+      console.error('Error refreshing family data for date range:', error);
+    } finally {
+      setDataLoading(false);
     }
   };
 
@@ -300,6 +326,7 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     initialLoading,
     dataLoading,
     refreshFamilyData,
+    refreshFamilyDataForDateRange,
     refreshUserData,
     refreshTasks,
     refreshPrivileges,

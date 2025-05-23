@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -121,6 +121,60 @@ async def get_privileges_for_calendar(current_user: User = Depends(get_current_u
     Children can see all privileges but can only view their assigned privileges (read-only).
     """
     result = await db.execute(select(Privilege))
+    privs = result.scalars().all()
+    
+    serialized_privs = []
+    for priv in privs:
+        priv_data = serialize_priv(priv)
+        # Add permission flag for frontend
+        if current_user.is_parent:
+            priv_data["canModify"] = True
+        else:
+            # Children can only view their own privileges (read-only)
+            is_assigned = str(current_user.id) == priv_data["assignedTo"]
+            priv_data["canModify"] = False  # Always read-only for children
+            priv_data["canView"] = is_assigned
+        
+        serialized_privs.append(priv_data)
+    
+    return serialized_privs
+
+@router.get("/privileges/calendar/range")
+async def get_privileges_for_calendar_range(
+    start_date: str = Query(..., description="Start date for the range (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="End date for the range (YYYY-MM-DD)"),
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get privileges for calendar view within a specific date range.
+    More efficient than fetching all privileges when only viewing a specific period.
+    """
+    from datetime import date
+    from fastapi import Query
+    
+    # Parse and validate dates
+    try:
+        start_dt = date.fromisoformat(start_date)
+        end_dt = date.fromisoformat(end_date)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD format."
+        )
+    
+    if start_dt > end_dt:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date must be before or equal to end_date"
+        )
+    
+    # Get privileges within the date range
+    stmt = select(Privilege).where(
+        Privilege.date >= start_dt,
+        Privilege.date <= end_dt
+    )
+    result = await db.execute(stmt)
     privs = result.scalars().all()
     
     serialized_privs = []

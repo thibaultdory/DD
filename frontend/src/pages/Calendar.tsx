@@ -73,7 +73,7 @@ const Calendar: React.FC = () => {
     rules, 
     initialLoading, 
     dataLoading,
-    refreshFamilyData,
+    refreshFamilyDataForDateRange,
     getCalendarTasks
   } = useDataCache();
   
@@ -143,34 +143,31 @@ const Calendar: React.FC = () => {
 
   const daysToDisplay = getDaysToDisplay();
 
-  // Refresh data when navigating to a different month to ensure we have tasks for the new period
+  // Fetch data for the specific date range being displayed
   useEffect(() => {
     if (!authState.currentUser || initialLoading) return;
     
-    // Check if we've navigated to a significantly different period (different month)
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-    const selectedMonth = selectedDate.getMonth();
-    const selectedYear = selectedDate.getFullYear();
-    
-    // If we're viewing a different month than current, refresh family data to ensure we have all tasks
-    const isSignificantDateChange = 
-      Math.abs((selectedYear - currentYear) * 12 + (selectedMonth - currentMonth)) > 1;
-    
-    if (isSignificantDateChange) {
-      console.log('Significant date change detected, refreshing family data...');
-      // Note: In a future improvement, we should modify the API to accept date ranges
-      // For now, we refresh all data when navigating far from current month
-      if (authState.currentUser) {
-        // Small delay to debounce rapid navigation
-        const timeoutId = setTimeout(() => {
-          refreshFamilyData();
-        }, 300);
-        
-        return () => clearTimeout(timeoutId);
+    const fetchDataForCurrentPeriod = async () => {
+      const startDate = daysToDisplay[0];
+      const endDate = daysToDisplay[daysToDisplay.length - 1];
+      
+      const startDateStr = format(startDate, 'yyyy-MM-dd');
+      const endDateStr = format(endDate, 'yyyy-MM-dd');
+      
+      console.log(`Fetching data for period: ${startDateStr} to ${endDateStr}`);
+      
+      try {
+        // Use the new date range fetching method
+        await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      } catch (error) {
+        console.error('Error fetching data for current period:', error);
       }
-    }
-  }, [selectedDate, authState.currentUser, initialLoading, refreshFamilyData]);
+    };
+
+    // Debounce the fetch to avoid excessive calls during rapid navigation
+    const timeoutId = setTimeout(fetchDataForCurrentPeriod, 100);
+    return () => clearTimeout(timeoutId);
+  }, [selectedDate, calendarView, authState.currentUser, initialLoading, refreshFamilyDataForDateRange, daysToDisplay]);
 
   useEffect(() => {
     // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut

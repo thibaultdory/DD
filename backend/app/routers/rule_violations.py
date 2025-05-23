@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -95,6 +95,59 @@ async def get_violations_for_calendar(current_user: User = Depends(get_current_u
     Children can see all violations but can only view their own violations (read-only).
     """
     result = await db.execute(select(RuleViolation))
+    violations = result.scalars().all()
+    
+    serialized_violations = []
+    for violation in violations:
+        violation_data = serialize_violation(violation)
+        # Add permission flag for frontend
+        if current_user.is_parent:
+            violation_data["canModify"] = True
+        else:
+            # Children can only view their own violations (read-only)
+            is_assigned = str(current_user.id) == violation_data["childId"]
+            violation_data["canModify"] = False  # Always read-only for children
+            violation_data["canView"] = is_assigned
+        
+        serialized_violations.append(violation_data)
+    
+    return serialized_violations
+
+@router.get("/rule-violations/calendar/range")
+async def get_violations_for_calendar_range(
+    start_date: str = Query(..., description="Start date for the range (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="End date for the range (YYYY-MM-DD)"),
+    current_user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get rule violations for calendar view within a specific date range.
+    More efficient than fetching all violations when only viewing a specific period.
+    """
+    from fastapi import Query
+    
+    # Parse and validate dates
+    try:
+        start_dt = date.fromisoformat(start_date)
+        end_dt = date.fromisoformat(end_date)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid date format. Use YYYY-MM-DD format."
+        )
+    
+    if start_dt > end_dt:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date must be before or equal to end_date"
+        )
+    
+    # Get violations within the date range
+    stmt = select(RuleViolation).where(
+        RuleViolation.date >= start_dt,
+        RuleViolation.date <= end_dt
+    )
+    result = await db.execute(stmt)
     violations = result.scalars().all()
     
     serialized_violations = []
