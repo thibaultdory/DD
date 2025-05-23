@@ -52,20 +52,6 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
   const [initialLoading, setInitialLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
 
-  // Initialize cache when user logs in
-  useEffect(() => {
-    if (authState.currentUser) {
-      refreshFamilyData();
-    } else {
-      // Clear cache when user logs out
-      setFamilyTasks(null);
-      setFamilyPrivileges(null);
-      setFamilyViolations(null);
-      setRules(null);
-      setInitialLoading(true);
-    }
-  }, [authState.currentUser]);
-
   const refreshFamilyData = async () => {
     if (!authState.currentUser) return;
     
@@ -90,6 +76,20 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
       setInitialLoading(false);
     }
   };
+
+  // Initialize cache when user logs in
+  useEffect(() => {
+    if (authState.currentUser) {
+      refreshFamilyData();
+    } else {
+      // Clear cache when user logs out
+      setFamilyTasks(null);
+      setFamilyPrivileges(null);
+      setFamilyViolations(null);
+      setRules(null);
+      setInitialLoading(true);
+    }
+  }, [authState.currentUser]);
 
   const refreshUserData = async (userId: string) => {
     setDataLoading(true);

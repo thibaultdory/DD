@@ -19,8 +19,6 @@ import {
   Stack
 } from '@mui/material';
 import { 
-  Add, 
-  Edit, 
   CheckCircle,
   Cancel,
   Assignment,
@@ -29,7 +27,7 @@ import {
   Undo,
   Check 
 } from '@mui/icons-material';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useDataCache } from '../contexts/DataCacheContext';
 import { Task, Privilege, RuleViolation } from '../types';
@@ -74,8 +72,7 @@ const Home: React.FC = () => {
     getUserPrivileges,
     getUserViolations,
     rules,
-    initialLoading,
-    dataLoading
+    initialLoading
   } = useDataCache();
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -286,11 +283,25 @@ const Home: React.FC = () => {
           value={tabValue} 
           onChange={handleTabChange} 
           aria-label="basic tabs example"
-          disabled={viewLoading}
         >
-          <Tab label="Tâches" icon={<Assignment />} iconPosition="start" />
-          <Tab label="Privilèges" icon={<EmojiEvents />} iconPosition="start" />
-          <Tab label="Infractions" icon={<Warning />} iconPosition="start" />
+          <Tab 
+            label="Tâches" 
+            icon={<Assignment />} 
+            iconPosition="start" 
+            disabled={viewLoading}
+          />
+          <Tab 
+            label="Privilèges" 
+            icon={<EmojiEvents />} 
+            iconPosition="start" 
+            disabled={viewLoading}
+          />
+          <Tab 
+            label="Infractions" 
+            icon={<Warning />} 
+            iconPosition="start" 
+            disabled={viewLoading}
+          />
         </Tabs>
       </Box>
 
