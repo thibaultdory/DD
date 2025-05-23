@@ -15,7 +15,6 @@ import {
   Button,
   Avatar,
   Tooltip,
-  Divider,
   Stack,
   Dialog,
   DialogTitle,
@@ -41,6 +40,34 @@ import { Task, Privilege, RuleViolation } from '../types';
 import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
 import { isPast, isToday, parseISO } from 'date-fns';
+
+// Color schemes for children (consistent with calendar)
+const CHILD_COLORS = [
+  { primary: '#1976d2', light: '#e3f2fd', dark: '#0d47a1', contrast: '#ffffff' }, // Blue
+  { primary: '#388e3c', light: '#e8f5e8', dark: '#1b5e20', contrast: '#ffffff' }, // Green
+  { primary: '#f57c00', light: '#fff3e0', dark: '#e65100', contrast: '#ffffff' }, // Orange
+  { primary: '#7b1fa2', light: '#f3e5f5', dark: '#4a148c', contrast: '#ffffff' }, // Purple
+  { primary: '#d32f2f', light: '#ffebee', dark: '#b71c1c', contrast: '#ffffff' }, // Red
+  { primary: '#00796b', light: '#e0f2f1', dark: '#004d40', contrast: '#ffffff' }, // Teal
+  { primary: '#455a64', light: '#eceff1', dark: '#263238', contrast: '#ffffff' }, // Blue Grey
+  { primary: '#f9a825', light: '#fffde7', dark: '#f57f17', contrast: '#000000' }, // Amber
+];
+
+// Type colors (consistent with calendar)
+const TYPE_COLORS = {
+  task: {
+    completed: { bg: '#4caf50', color: '#ffffff', light: '#c8e6c9' },
+    pending: { bg: '#ff9800', color: '#ffffff', light: '#ffe0b2' },
+    overdue: { bg: '#f44336', color: '#ffffff', light: '#ffcdd2' }
+  },
+  privilege: {
+    earned: { bg: '#9c27b0', color: '#ffffff', light: '#e1bee7' },
+    notEarned: { bg: '#607d8b', color: '#ffffff', light: '#cfd8dc' }
+  },
+  violation: {
+    default: { bg: '#e91e63', color: '#ffffff', light: '#f8bbd9' }
+  }
+};
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -99,6 +126,34 @@ const Home: React.FC = () => {
 
   const limit = 5; // Nombre d'éléments par page
   const children = authState.family.filter(user => !user.isParent);
+
+  // Utility functions for colors (consistent with calendar)
+  const getChildColorScheme = (userId: string) => {
+    const childIndex = children.findIndex(child => child.id === userId);
+    return CHILD_COLORS[childIndex % CHILD_COLORS.length];
+  };
+
+  const getTaskColor = (task: Task) => {
+    if (task.completed) {
+      return TYPE_COLORS.task.completed;
+    } else if (isPast(parseISO(task.dueDate)) && !isToday(parseISO(task.dueDate))) {
+      return TYPE_COLORS.task.overdue;
+    } else {
+      return TYPE_COLORS.task.pending;
+    }
+  };
+
+  const getPrivilegeColor = (privilege: Privilege) => {
+    return privilege.earned ? TYPE_COLORS.privilege.earned : TYPE_COLORS.privilege.notEarned;
+  };
+
+  const getViolationColor = () => {
+    return TYPE_COLORS.violation.default;
+  };
+
+  const getFirstName = (fullName: string): string => {
+    return fullName.split(' ')[0];
+  };
 
   useEffect(() => {
     // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
@@ -308,28 +363,70 @@ const Home: React.FC = () => {
             Afficher les données de :
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {children.map(child => (
-              <Tooltip key={child.id} title={child.name}>
-                <Avatar
-                  src={child.profilePicture}
-                  alt={child.name}
-                  sx={{ 
-                    width: 40, 
-                    height: 40, 
-                    cursor: viewLoading ? 'default' : 'pointer',
-                    border: selectedChild === child.id ? '2px solid #1976d2' : 'none',
-                    opacity: viewLoading ? 0.5 : (selectedChild === child.id ? 1 : 0.6)
-                  }}
-                  onClick={viewLoading ? undefined : () => handleChildSelect(child.id)}
-                />
-              </Tooltip>
-            ))}
+            {children.map(child => {
+              const childColorScheme = getChildColorScheme(child.id);
+              return (
+                <Tooltip key={child.id} title={child.name}>
+                  <Avatar
+                    src={child.profilePicture}
+                    alt={child.name}
+                    sx={{ 
+                      width: 40, 
+                      height: 40, 
+                      cursor: viewLoading ? 'default' : 'pointer',
+                      border: selectedChild === child.id ? `3px solid ${childColorScheme.primary}` : `2px solid ${childColorScheme.light}`,
+                      opacity: viewLoading ? 0.5 : (selectedChild === child.id ? 1 : 0.7),
+                      bgcolor: childColorScheme.light,
+                      color: childColorScheme.primary,
+                      fontWeight: 'bold',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onClick={viewLoading ? undefined : () => handleChildSelect(child.id)}
+                  >
+                    {!child.profilePicture && getFirstName(child.name).charAt(0).toUpperCase()}
+                  </Avatar>
+                </Tooltip>
+              );
+            })}
           </Box>
           {viewLoading && (
             <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
               Mise à jour...
             </Typography>
           )}
+        </Box>
+      )}
+
+      {/* Color Legend for multiple children */}
+      {authState.currentUser?.isParent && children.length > 1 && (
+        <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+            Légende des couleurs par enfant :
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            {children.map(child => {
+              const childColorScheme = getChildColorScheme(child.id);
+              return (
+                <Box key={child.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box
+                    sx={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      bgcolor: childColorScheme.primary,
+                      border: `2px solid ${childColorScheme.light}`
+                    }}
+                  />
+                  <Typography variant="body2" sx={{ color: childColorScheme.primary, fontWeight: 500 }}>
+                    {getFirstName(child.name)}
+                  </Typography>
+                </Box>
+              );
+            })}
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Chaque enfant a sa propre couleur pour faciliter l'identification.
+          </Typography>
         </Box>
       )}
 
@@ -387,98 +484,138 @@ const Home: React.FC = () => {
               Aucune tâche à afficher
             </Typography>
           ) : (
-            <List>
-              {tasks.map((task) => (
-                <React.Fragment key={task.id}>
-                  <ListItem
-                    secondaryAction={
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        {/* Edit and Delete buttons for parents */}
-                        {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
-                          <>
-                            <Tooltip title="Modifier la tâche">
-                              <IconButton
-                                edge="end"
-                                aria-label="edit"
-                                onClick={() => handleEditTask(task)}
-                                size="small"
-                              >
-                                <Edit />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Supprimer la tâche">
-                              <IconButton
-                                edge="end"
-                                aria-label="delete"
-                                onClick={() => handleDeleteTask(task)}
-                                size="small"
-                              >
-                                <Delete />
-                              </IconButton>
-                            </Tooltip>
-                          </>
-                        )}
-                        
-                        {/* Complete/Uncomplete button */}
-                        {task.completed ? (
-                          <Tooltip title="Marquer comme non terminé">
-                            <IconButton
-                              edge="end"
-                              aria-label="uncomplete"
-                              onClick={() => handleToggleTaskComplete(task)}
-                            >
-                              <Undo />
-                            </IconButton>
-                          </Tooltip>
-                        ) : (
-                          <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
-                            <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
-                              <IconButton
-                                edge="end"
-                                aria-label="complete"
-                                onClick={() => handleToggleTaskComplete(task)}
-                                disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
-                              >
-                                <Check />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        )}
-                      </Box>
-                    }
-                  >
-                    <ListItemIcon>
-                      {task.completed ? (
-                        <CheckCircle color="success" />
-                      ) : (
-                        <Cancel color="error" />
-                      )}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={task.title}
-                      secondary={
-                        <>
-                          {task.description && <span>{task.description}<br /></span>}
-                          <span>Échéance: {task.dueDate}</span>
-                          {authState.currentUser?.isParent && !selectedChild && (
+            <List sx={{ p: 0 }}>
+              {tasks.map((task) => {
+                const taskColor = getTaskColor(task);
+                const childColorScheme = task.assignedTo[0] ? getChildColorScheme(task.assignedTo[0]) : CHILD_COLORS[0];
+                
+                return (
+                  <React.Fragment key={task.id}>
+                    <ListItem
+                      sx={{
+                        mb: 1,
+                        borderRadius: 1,
+                        bgcolor: taskColor.light,
+                        border: `1px solid ${childColorScheme.primary}`,
+                        borderLeft: `4px solid ${childColorScheme.primary}`,
+                        '&:hover': {
+                          transform: 'translateY(-1px)',
+                          boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
+                        },
+                        transition: 'all 0.2s ease'
+                      }}
+                      secondaryAction={
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          {/* Edit and Delete buttons for parents */}
+                          {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
                             <>
-                              <br />
-                              <span>Assigné à: {task.assignedTo.map(id => getUserName(id)).join(', ')}</span>
+                              <Tooltip title="Modifier la tâche">
+                                <IconButton
+                                  edge="end"
+                                  aria-label="edit"
+                                  onClick={() => handleEditTask(task)}
+                                  size="small"
+                                >
+                                  <Edit />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Supprimer la tâche">
+                                <IconButton
+                                  edge="end"
+                                  aria-label="delete"
+                                  onClick={() => handleDeleteTask(task)}
+                                  size="small"
+                                >
+                                  <Delete />
+                                </IconButton>
+                              </Tooltip>
                             </>
                           )}
-                        </>
+                          
+                          {/* Complete/Uncomplete button */}
+                          {task.completed ? (
+                            <Tooltip title="Marquer comme non terminé">
+                              <IconButton
+                                edge="end"
+                                aria-label="uncomplete"
+                                onClick={() => handleToggleTaskComplete(task)}
+                              >
+                                <Undo />
+                              </IconButton>
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                              <span> {/* IconButton disabled state needs a span wrapper for Tooltip to work */} 
+                                <IconButton
+                                  edge="end"
+                                  aria-label="complete"
+                                  onClick={() => handleToggleTaskComplete(task)}
+                                  disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                                >
+                                  <Check />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                        </Box>
                       }
-                      primaryTypographyProps={{
-                        style: { 
-                          textDecoration: task.completed ? 'line-through' : 'none',
-                          color: task.completed ? 'text.secondary' : 'text.primary'
+                    >
+                      <ListItemIcon>
+                        {task.completed ? (
+                          <CheckCircle sx={{ color: taskColor.bg }} />
+                        ) : (
+                          <Cancel sx={{ color: taskColor.bg }} />
+                        )}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="body1"
+                              sx={{
+                                textDecoration: task.completed ? 'line-through' : 'none',
+                                fontWeight: 500,
+                                color: 'text.primary'
+                              }}
+                            >
+                              {task.title}
+                            </Typography>
+                            {/* Child indicator */}
+                            {authState.currentUser?.isParent && !selectedChild && (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Box
+                                  sx={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    bgcolor: childColorScheme.primary,
+                                    flexShrink: 0
+                                  }}
+                                />
+                                <Typography 
+                                  variant="caption"
+                                  sx={{ 
+                                    color: childColorScheme.primary,
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  {getFirstName(getUserName(task.assignedTo[0]))}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
                         }
-                      }}
-                    />
-                  </ListItem>
-                  <Divider variant="inset" component="li" />
-                </React.Fragment>
-              ))}
+                        secondary={
+                          <>
+                            {task.description && <span>{task.description}<br /></span>}
+                            <span>Échéance: {task.dueDate}</span>
+                          </>
+                        }
+                      />
+                    </ListItem>
+                  </React.Fragment>
+                );
+              })}
             </List>
           )}
           {tasks.length > 0 && (
@@ -520,41 +657,87 @@ const Home: React.FC = () => {
               Aucun privilège à afficher
             </Typography>
           ) : (
-            <List>
-              {privileges.map((privilege) => (
-                <React.Fragment key={privilege.id}>
-                  <ListItem>
-                    <ListItemIcon>
-                      {privilege.earned ? (
-                        <CheckCircle color="success" />
-                      ) : (
-                        <Cancel color="error" />
-                      )}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={privilege.title}
-                      secondary={
-                        <>
-                          {privilege.description && <span>{privilege.description}<br /></span>}
-                          <span>Date: {privilege.date}</span>
-                          {authState.currentUser?.isParent && !selectedChild && (
-                            <>
-                              <br />
-                              <span>Assigné à: {getUserName(privilege.assignedTo)}</span>
-                            </>
-                          )}
-                        </>
-                      }
-                    />
-                    <Chip 
-                      label={privilege.earned ? "Mérité" : "Non mérité"} 
-                      color={privilege.earned ? "success" : "error"} 
-                      size="small" 
-                    />
-                  </ListItem>
-                  <Divider variant="inset" component="li" />
-                </React.Fragment>
-              ))}
+            <List sx={{ p: 0 }}>
+              {privileges.map((privilege) => {
+                const privilegeColor = getPrivilegeColor(privilege);
+                const childColorScheme = getChildColorScheme(privilege.assignedTo);
+                
+                return (
+                  <React.Fragment key={privilege.id}>
+                    <ListItem
+                      sx={{
+                        mb: 1,
+                        borderRadius: 1,
+                        bgcolor: privilegeColor.light,
+                        border: `1px solid ${childColorScheme.primary}`,
+                        borderLeft: `4px solid ${childColorScheme.primary}`,
+                        '&:hover': {
+                          transform: 'translateY(-1px)',
+                          boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
+                        },
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <ListItemIcon>
+                        <EmojiEvents sx={{ color: privilegeColor.bg }} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="body1"
+                              sx={{
+                                fontWeight: 500,
+                                color: 'text.primary'
+                              }}
+                            >
+                              {privilege.title}
+                            </Typography>
+                            {/* Child indicator */}
+                            {authState.currentUser?.isParent && !selectedChild && (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Box
+                                  sx={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    bgcolor: childColorScheme.primary,
+                                    flexShrink: 0
+                                  }}
+                                />
+                                <Typography 
+                                  variant="caption"
+                                  sx={{ 
+                                    color: childColorScheme.primary,
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  {getFirstName(getUserName(privilege.assignedTo))}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        }
+                        secondary={
+                          <>
+                            {privilege.description && <span>{privilege.description}<br /></span>}
+                            <span>Date: {privilege.date}</span>
+                          </>
+                        }
+                      />
+                      <Chip 
+                        label={privilege.earned ? "Mérité" : "Non mérité"} 
+                        sx={{
+                          bgcolor: privilegeColor.bg,
+                          color: privilegeColor.color,
+                          fontWeight: 500
+                        }}
+                        size="small" 
+                      />
+                    </ListItem>
+                  </React.Fragment>
+                );
+              })}
             </List>
           )}
           {privileges.length > 0 && (
@@ -596,37 +779,83 @@ const Home: React.FC = () => {
               Aucune infraction à afficher
             </Typography>
           ) : (
-            <List>
-              {violations.map((violation) => (
-                <React.Fragment key={violation.id}>
-                  <ListItem>
-                    <ListItemIcon>
-                      <Warning color="warning" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={`Règle enfreinte: ${getRuleName(violation.ruleId)}`}
-                      secondary={
-                        <>
-                          <span>Date: {violation.date}</span>
-                          {violation.description && (
-                            <>
-                              <br />
-                              <span>Description: {violation.description}</span>
-                            </>
-                          )}
-                          {authState.currentUser?.isParent && !selectedChild && (
-                            <>
-                              <br />
-                              <span>Enfant: {getUserName(violation.childId)}</span>
-                            </>
-                          )}
-                        </>
-                      }
-                    />
-                  </ListItem>
-                  <Divider variant="inset" component="li" />
-                </React.Fragment>
-              ))}
+            <List sx={{ p: 0 }}>
+              {violations.map((violation) => {
+                const violationColor = getViolationColor();
+                const childColorScheme = getChildColorScheme(violation.childId);
+                
+                return (
+                  <React.Fragment key={violation.id}>
+                    <ListItem
+                      sx={{
+                        mb: 1,
+                        borderRadius: 1,
+                        bgcolor: violationColor.light,
+                        border: `1px solid ${childColorScheme.primary}`,
+                        borderLeft: `4px solid ${childColorScheme.primary}`,
+                        '&:hover': {
+                          transform: 'translateY(-1px)',
+                          boxShadow: '0 4px 8px rgba(0, 0, 0, 0.12)',
+                        },
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <ListItemIcon>
+                        <Warning sx={{ color: violationColor.bg }} />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="body1"
+                              sx={{
+                                fontWeight: 500,
+                                color: 'text.primary'
+                              }}
+                            >
+                              {getRuleName(violation.ruleId)}
+                            </Typography>
+                            {/* Child indicator */}
+                            {authState.currentUser?.isParent && !selectedChild && (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Box
+                                  sx={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    bgcolor: childColorScheme.primary,
+                                    flexShrink: 0
+                                  }}
+                                />
+                                <Typography 
+                                  variant="caption"
+                                  sx={{ 
+                                    color: childColorScheme.primary,
+                                    fontWeight: 600
+                                  }}
+                                >
+                                  {getFirstName(getUserName(violation.childId))}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        }
+                        secondary={
+                          <>
+                            <span>Date: {violation.date}</span>
+                            {violation.description && (
+                              <>
+                                <br />
+                                <span>Description: {violation.description}</span>
+                              </>
+                            )}
+                          </>
+                        }
+                      />
+                    </ListItem>
+                  </React.Fragment>
+                );
+              })}
             </List>
           )}
           {violations.length > 0 && (
