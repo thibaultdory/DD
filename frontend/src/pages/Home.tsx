@@ -148,15 +148,16 @@ const Home: React.FC = () => {
     const items: TimelineItem[] = [];
     // Normalize range dates to the start of the day for accurate comparison
     const rangeStart = startOfDay(startDate);
-    const rangeEnd = startOfDay(endDate);
+    // To make the endDate inclusive, we check if the item is < start of the NEXT day
+    const exclusiveRangeEnd = startOfDay(addDays(endDate, 1));
     
     // Filter tasks for this date range
     const filteredTasks = tasks.filter(task => {
       // Normalize task due date to the start of the day
       const taskDate = startOfDay(parseISO(task.dueDate));
-      // Check if taskDate is on or after rangeStart AND on or before rangeEnd
+      
       const isAfterOrOnStart = taskDate.getTime() >= rangeStart.getTime();
-      const isBeforeOrOnEnd = taskDate.getTime() <= rangeEnd.getTime();
+      const isStrictlyBeforeExclusiveEnd = taskDate.getTime() < exclusiveRangeEnd.getTime();
 
       // Detailed logging for tasks
       if (true) { // Easy to toggle logging
@@ -164,41 +165,45 @@ const Home: React.FC = () => {
           id: task.id,
           title: task.title,
           originalDueDate: task.dueDate,
-          parsedTaskDate: parseISO(task.dueDate).toISOString(),
-          normalizedTaskDate: taskDate.toISOString(),
-          rangeStart: rangeStart.toISOString(),
-          rangeEnd: rangeEnd.toISOString(),
+          normalizedTaskDateMs: taskDate.getTime(),
+          normalizedTaskDateISO: taskDate.toISOString(),
+          rangeStartMs: rangeStart.getTime(),
+          rangeStartISO: rangeStart.toISOString(),
+          exclusiveRangeEndMs: exclusiveRangeEnd.getTime(),
+          exclusiveRangeEndISO: exclusiveRangeEnd.toISOString(),
           isAfterOrOnStart,
-          isBeforeOrOnEnd,
-          isInRange: isAfterOrOnStart && isBeforeOrOnEnd
+          isStrictlyBeforeExclusiveEnd,
+          isInRange: isAfterOrOnStart && isStrictlyBeforeExclusiveEnd
         });
       }
-      return isAfterOrOnStart && isBeforeOrOnEnd;
+      return isAfterOrOnStart && isStrictlyBeforeExclusiveEnd;
     });
     
     // Filter violations for this date range
     const filteredViolations = violations.filter(violation => {
       // Normalize violation date to the start of the day
       const violationDate = startOfDay(parseISO(violation.date));
-      // Check if violationDate is on or after rangeStart AND on or before rangeEnd
+      
       const isAfterOrOnStart = violationDate.getTime() >= rangeStart.getTime();
-      const isBeforeOrOnEnd = violationDate.getTime() <= rangeEnd.getTime();
+      const isStrictlyBeforeExclusiveEnd = violationDate.getTime() < exclusiveRangeEnd.getTime();
       
       // Detailed logging for violations
       if (true) { // Easy to toggle logging
         console.log('[TimelineDebug] Violation Check:', {
           id: violation.id,
           originalDate: violation.date,
-          parsedViolationDate: parseISO(violation.date).toISOString(),
-          normalizedViolationDate: violationDate.toISOString(),
-          rangeStart: rangeStart.toISOString(),
-          rangeEnd: rangeEnd.toISOString(),
+          normalizedViolationDateMs: violationDate.getTime(),
+          normalizedViolationDateISO: violationDate.toISOString(),
+          rangeStartMs: rangeStart.getTime(),
+          rangeStartISO: rangeStart.toISOString(),
+          exclusiveRangeEndMs: exclusiveRangeEnd.getTime(),
+          exclusiveRangeEndISO: exclusiveRangeEnd.toISOString(),
           isAfterOrOnStart,
-          isBeforeOrOnEnd,
-          isInRange: isAfterOrOnStart && isBeforeOrOnEnd
+          isStrictlyBeforeExclusiveEnd,
+          isInRange: isAfterOrOnStart && isStrictlyBeforeExclusiveEnd
         });
       }
-      return isAfterOrOnStart && isBeforeOrOnEnd;
+      return isAfterOrOnStart && isStrictlyBeforeExclusiveEnd;
     });
     
     console.log('[Timeline] Filtered for date range (using startOfDay):', {
