@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Box, 
   Typography, 
@@ -19,7 +19,9 @@ import {
   DialogActions,
   Button,
   Avatar,
-  DialogContentText
+  DialogContentText,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import { 
   CheckCircle, 
@@ -93,6 +95,9 @@ const TYPE_COLORS = {
 const Calendar: React.FC = () => {
   const { authState } = useAuth();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { 
     familyTasks, 
     familyPrivileges, 
@@ -174,6 +179,26 @@ const Calendar: React.FC = () => {
     }
   };
 
+  // Auto-scroll to current day on mobile
+  const scrollToCurrentDay = () => {
+    if (!isMobile || !scrollContainerRef.current || calendarView !== 'week') return;
+    
+    const today = new Date();
+    const startOfCurrentWeek = startOfWeek(selectedDate, { weekStartsOn: 1 });
+    const currentWeekDays = [...Array(7)].map((_, i) => addDays(startOfCurrentWeek, i));
+    const todayIndex = currentWeekDays.findIndex(day => isSameDay(day, today));
+    
+    if (todayIndex >= 0) {
+      const dayElement = scrollContainerRef.current.querySelector(`[data-day-index="${todayIndex}"]`);
+      if (dayElement) {
+        dayElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+      }
+    }
+  };
+
   // Generate days based on current view - memoized to prevent unnecessary recalculations
   const daysToDisplay = useMemo(() => {
     if (calendarView === 'week') {
@@ -195,6 +220,14 @@ const Calendar: React.FC = () => {
       return days;
     }
   }, [selectedDate, calendarView]);
+
+  // Auto-scroll when view changes to week on mobile or when data loads
+  useEffect(() => {
+    if (isMobile && calendarView === 'week' && !initialLoading) {
+      const timer = setTimeout(scrollToCurrentDay, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [calendarView, isMobile, initialLoading, selectedDate]);
 
   // Fetch data for the specific date range being displayed
   useEffect(() => {
@@ -821,6 +854,442 @@ const Calendar: React.FC = () => {
     return weeks;
   };
 
+  // Mobile week view renderer
+  const renderMobileWeekView = () => {
+    return (
+      <Box 
+        ref={scrollContainerRef}
+        sx={{ 
+          height: 'calc(100vh - 280px)', // Adjust based on header and controls height
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          px: 1
+        }}
+      >
+        {daysToDisplay.map((day, index) => {
+          const dayTasks = getTasksForDay(day);
+          const dayPrivileges = getPrivilegesForDay(day);
+          const dayViolations = getViolationsForDay(day);
+          const hasEvents = dayTasks.length > 0 || dayPrivileges.length > 0 || dayViolations.length > 0;
+          
+          return (
+            <Paper 
+              key={day.toString()}
+              data-day-index={index}
+              sx={{ 
+                mb: 2,
+                p: 2,
+                border: isToday(day) ? '2px solid #1976d2' : '1px solid #e0e0e0',
+                borderLeft: isToday(day) ? '4px solid #1976d2' : '4px solid #e0e0e0',
+                bgcolor: isToday(day) ? '#f3f7ff' : 'background.paper',
+                position: 'relative'
+              }}
+            >
+              {/* Day Header */}
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                mb: hasEvents ? 2 : 0
+              }}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    fontWeight: isToday(day) ? 'bold' : '600',
+                    color: isToday(day) ? 'primary.main' : 'text.primary'
+                  }}
+                >
+                  {format(day, 'EEEE d MMMM', { locale: fr })}
+                </Typography>
+                {isToday(day) && (
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      bgcolor: 'primary.main', 
+                      color: 'white', 
+                      px: 1.5, 
+                      py: 0.5, 
+                      borderRadius: 2,
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    Aujourd'hui
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Day Content */}
+              {hasEvents ? (
+                <Box>
+                  {/* Tasks */}
+                  {dayTasks.length > 0 && (
+                    <Box sx={{ mb: dayPrivileges.length > 0 || dayViolations.length > 0 ? 2 : 0 }}>
+                      <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          mb: 1.5,
+                          fontWeight: 600,
+                          color: 'text.primary'
+                        }}
+                      >
+                        <Assignment sx={{ mr: 1, color: 'primary.main' }} />
+                        Tâches ({dayTasks.length})
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {dayTasks.map(task => {
+                          const taskColor = getTaskColor(task);
+                          const childColorScheme = getChildColorScheme(task.assignedTo[0]);
+                          
+                          return (
+                            <Paper
+                              key={task.id}
+                              elevation={1}
+                              sx={{ 
+                                p: 2,
+                                borderRadius: 2,
+                                bgcolor: taskColor.light,
+                                border: `1px solid ${childColorScheme.primary}`,
+                                borderLeft: `4px solid ${childColorScheme.primary}`,
+                                opacity: task.completed ? 0.8 : 1
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                <Box sx={{ flex: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                    {task.completed ? (
+                                      <CheckCircle sx={{ mr: 1, color: taskColor.bg, fontSize: 20 }} />
+                                    ) : (
+                                      <Cancel sx={{ mr: 1, color: taskColor.bg, fontSize: 20 }} />
+                                    )}
+                                    <Typography 
+                                      variant="body1" 
+                                      sx={{ 
+                                        fontWeight: 600,
+                                        textDecoration: task.completed ? 'line-through' : 'none',
+                                        flex: 1
+                                      }}
+                                    >
+                                      {task.title}
+                                    </Typography>
+                                  </Box>
+                                  
+                                  {task.description && (
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                      {task.description}
+                                    </Typography>
+                                  )}
+                                  
+                                  {viewMode === 'family' && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Box
+                                        sx={{
+                                          width: 12,
+                                          height: 12,
+                                          borderRadius: '50%',
+                                          bgcolor: childColorScheme.primary,
+                                          flexShrink: 0
+                                        }}
+                                      />
+                                      <Typography 
+                                        variant="body2"
+                                        sx={{ 
+                                          color: childColorScheme.primary,
+                                          fontWeight: 600
+                                        }}
+                                      >
+                                        {getFirstName(getUserName(task.assignedTo[0]))}
+                                      </Typography>
+                                    </Box>
+                                  )}
+                                </Box>
+                                
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                  <Tooltip title="Voir détails">
+                                    <IconButton 
+                                      size="small" 
+                                      onClick={() => handleItemClick(task, 'task')}
+                                    >
+                                      <Info fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                  
+                                  {/* Task action buttons */}
+                                  {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                                    <>
+                                      <Tooltip title="Modifier la tâche">
+                                        <IconButton 
+                                          size="small" 
+                                          onClick={() => handleEditTask(task)}
+                                        >
+                                          <Edit fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                      <Tooltip title="Supprimer la tâche">
+                                        <IconButton 
+                                          size="small" 
+                                          onClick={() => handleDeleteTask(task)}
+                                        >
+                                          <Delete fontSize="small" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </>
+                                  )}
+                                  
+                                  {task.canModify !== false && (
+                                    <>
+                                      {task.completed ? (
+                                        <Tooltip title="Marquer comme non terminé">
+                                          <IconButton 
+                                            size="small" 
+                                            onClick={() => handleToggleTaskComplete(task)}
+                                          >
+                                            <Undo fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                      ) : (
+                                        <Tooltip title={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate))) ? "Impossible de terminer une tâche future" : "Marquer comme terminé"}>
+                                          <span>
+                                            <IconButton 
+                                              size="small" 
+                                              onClick={() => handleToggleTaskComplete(task)}
+                                              disabled={!(isPast(parseISO(task.dueDate)) || isToday(parseISO(task.dueDate)))}
+                                            >
+                                              <Check fontSize="small" />
+                                            </IconButton>
+                                          </span>
+                                        </Tooltip>
+                                      )}
+                                    </>
+                                  )}
+                                </Box>
+                              </Box>
+                            </Paper>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Privileges */}
+                  {dayPrivileges.length > 0 && (
+                    <Box sx={{ mb: dayViolations.length > 0 ? 2 : 0 }}>
+                      <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          mb: 1.5,
+                          fontWeight: 600,
+                          color: 'text.primary'
+                        }}
+                      >
+                        <EmojiEvents sx={{ mr: 1, color: 'secondary.main' }} />
+                        Privilèges ({dayPrivileges.length})
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {dayPrivileges.map(privilege => {
+                          const privilegeColor = getPrivilegeColor(privilege);
+                          const childColorScheme = getChildColorScheme(privilege.assignedTo);
+                          
+                          return (
+                            <Paper
+                              key={privilege.id}
+                              elevation={1}
+                              sx={{ 
+                                p: 2,
+                                borderRadius: 2,
+                                bgcolor: privilegeColor.light,
+                                border: `1px solid ${childColorScheme.primary}`,
+                                borderLeft: `4px solid ${childColorScheme.primary}`
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                <Box sx={{ flex: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                    <EmojiEvents 
+                                      sx={{ mr: 1, color: privilegeColor.bg, fontSize: 20 }} 
+                                    />
+                                    <Typography 
+                                      variant="body1" 
+                                      sx={{ fontWeight: 600, flex: 1 }}
+                                    >
+                                      {privilege.title}
+                                    </Typography>
+                                  </Box>
+                                  
+                                  {privilege.description && (
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                      {privilege.description}
+                                    </Typography>
+                                  )}
+                                  
+                                  <Typography 
+                                    variant="caption" 
+                                    sx={{ 
+                                      bgcolor: privilegeColor.bg, 
+                                      color: 'white', 
+                                      px: 1, 
+                                      py: 0.25, 
+                                      borderRadius: 1,
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {privilege.earned ? 'Mérité' : 'Non mérité'}
+                                  </Typography>
+                                  
+                                  {viewMode === 'family' && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                                      <Box
+                                        sx={{
+                                          width: 12,
+                                          height: 12,
+                                          borderRadius: '50%',
+                                          bgcolor: childColorScheme.primary,
+                                          flexShrink: 0
+                                        }}
+                                      />
+                                      <Typography 
+                                        variant="body2"
+                                        sx={{ 
+                                          color: childColorScheme.primary,
+                                          fontWeight: 600
+                                        }}
+                                      >
+                                        {getFirstName(getUserName(privilege.assignedTo))}
+                                      </Typography>
+                                    </Box>
+                                  )}
+                                </Box>
+                                
+                                <Tooltip title="Voir détails">
+                                  <IconButton 
+                                    size="small" 
+                                    onClick={() => handleItemClick(privilege, 'privilege')}
+                                  >
+                                    <Info fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            </Paper>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  )}
+
+                  {/* Violations */}
+                  {dayViolations.length > 0 && (
+                    <Box>
+                      <Typography 
+                        variant="subtitle1" 
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          mb: 1.5,
+                          fontWeight: 600,
+                          color: 'text.primary'
+                        }}
+                      >
+                        <Warning sx={{ mr: 1, color: 'error.main' }} />
+                        Infractions ({dayViolations.length})
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {dayViolations.map(violation => {
+                          const violationColor = getViolationColor();
+                          const childColorScheme = getChildColorScheme(violation.childId);
+                          
+                          return (
+                            <Paper
+                              key={violation.id}
+                              elevation={1}
+                              sx={{ 
+                                p: 2,
+                                borderRadius: 2,
+                                bgcolor: violationColor.light,
+                                border: `1px solid ${childColorScheme.primary}`,
+                                borderLeft: `4px solid ${childColorScheme.primary}`
+                              }}
+                            >
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                                <Box sx={{ flex: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                    <Warning 
+                                      sx={{ mr: 1, color: violationColor.bg, fontSize: 20 }} 
+                                    />
+                                    <Typography 
+                                      variant="body1" 
+                                      sx={{ fontWeight: 600, flex: 1 }}
+                                    >
+                                      {getRuleName(violation.ruleId)}
+                                    </Typography>
+                                  </Box>
+                                  
+                                  {violation.description && (
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                      {violation.description}
+                                    </Typography>
+                                  )}
+                                  
+                                  {viewMode === 'family' && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Box
+                                        sx={{
+                                          width: 12,
+                                          height: 12,
+                                          borderRadius: '50%',
+                                          bgcolor: childColorScheme.primary,
+                                          flexShrink: 0
+                                        }}
+                                      />
+                                      <Typography 
+                                        variant="body2"
+                                        sx={{ 
+                                          color: childColorScheme.primary,
+                                          fontWeight: 600
+                                        }}
+                                      >
+                                        {getFirstName(getUserName(violation.childId))}
+                                      </Typography>
+                                    </Box>
+                                  )}
+                                </Box>
+                                
+                                <Tooltip title="Voir détails">
+                                  <IconButton 
+                                    size="small" 
+                                    onClick={() => handleItemClick(violation, 'violation')}
+                                  >
+                                    <Info fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
+                            </Paper>
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+              ) : (
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  py: 3,
+                  color: 'text.secondary'
+                }}>
+                  <Typography variant="body1">
+                    Aucun événement pour cette journée
+                  </Typography>
+                </Box>
+              )}
+            </Paper>
+          );
+        })}
+      </Box>
+    );
+  };
+
   if (initialLoading) {
     return (
       <Layout>
@@ -1005,49 +1474,56 @@ const Calendar: React.FC = () => {
         </Box>
       )}
 
-      <TableContainer component={Paper} sx={{ overflowX: 'auto', maxWidth: '100%' }}>
-        <Table sx={{ minWidth: 'auto', tableLayout: 'fixed' }}>
-          <TableHead>
-            <TableRow>
-              {/* Week view: show all days in header */}
-              {calendarView === 'week' && daysToDisplay.map((day) => (
-                <TableCell key={day.toString()} align="center" sx={{ width: '14.28%' }}>
-                  <Typography variant="subtitle1">
-                    {format(day, 'EEEE', { locale: fr })}
-                  </Typography>
-                  <Typography variant="body2">
-                    {format(day, 'd MMMM', { locale: fr })}
-                  </Typography>
-                </TableCell>
-              ))}
-              
-              {/* Month view: show day names only */}
-              {calendarView === 'month' && ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((dayName) => (
-                <TableCell key={dayName} align="center" sx={{ width: '14.28%' }}>
-                  <Typography variant="subtitle1">
-                    {dayName}
-                  </Typography>
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {calendarView === 'week' ? (
-              /* Week view: single row */
+      {/* Calendar Display */}
+      {isMobile && calendarView === 'week' ? (
+        // Mobile week view: vertical scrollable cards
+        renderMobileWeekView()
+      ) : (
+        // Desktop view or month view: table layout
+        <TableContainer component={Paper} sx={{ overflowX: 'auto', maxWidth: '100%' }}>
+          <Table sx={{ minWidth: 'auto', tableLayout: 'fixed' }}>
+            <TableHead>
               <TableRow>
-                {daysToDisplay.map((day) => renderDayCell(day))}
+                {/* Week view: show all days in header */}
+                {calendarView === 'week' && daysToDisplay.map((day) => (
+                  <TableCell key={day.toString()} align="center" sx={{ width: '14.28%' }}>
+                    <Typography variant="subtitle1">
+                      {format(day, 'EEEE', { locale: fr })}
+                    </Typography>
+                    <Typography variant="body2">
+                      {format(day, 'd MMMM', { locale: fr })}
+                    </Typography>
+                  </TableCell>
+                ))}
+                
+                {/* Month view: show day names only */}
+                {calendarView === 'month' && ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((dayName) => (
+                  <TableCell key={dayName} align="center" sx={{ width: '14.28%' }}>
+                    <Typography variant="subtitle1">
+                      {dayName}
+                    </Typography>
+                  </TableCell>
+                ))}
               </TableRow>
-            ) : (
-              /* Month view: multiple rows for weeks */
-              chunkDaysIntoWeeks(daysToDisplay).map((week, weekIndex) => (
-                <TableRow key={weekIndex}>
-                  {week.map((day) => renderDayCell(day))}
+            </TableHead>
+            <TableBody>
+              {calendarView === 'week' ? (
+                /* Week view: single row */
+                <TableRow>
+                  {daysToDisplay.map((day) => renderDayCell(day))}
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              ) : (
+                /* Month view: multiple rows for weeks */
+                chunkDaysIntoWeeks(daysToDisplay).map((week, weekIndex) => (
+                  <TableRow key={weekIndex}>
+                    {week.map((day) => renderDayCell(day))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
       {/* Dialogue de détails */}
       <Dialog open={detailsOpen} onClose={handleCloseDetails}>
