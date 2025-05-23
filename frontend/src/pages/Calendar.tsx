@@ -34,40 +34,32 @@ import {
 import { format, startOfWeek, addDays, isSameDay, parseISO, isPast, isToday } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
-import { Task, Privilege, RuleViolation, Rule } from '../types';
-import { 
-  taskService, 
-  privilegeService, 
-  ruleViolationService, 
-  ruleService 
-} from '../services/api';
+import { useDataCache } from '../contexts/DataCacheContext';
+import { Task, Privilege, RuleViolation } from '../types';
+import { taskService } from '../services/api';
 import Layout from '../components/Layout/Layout';
 
 const Calendar: React.FC = () => {
   const { authState } = useAuth();
+  const { 
+    familyTasks, 
+    familyPrivileges, 
+    familyViolations, 
+    rules, 
+    initialLoading, 
+    dataLoading,
+    getUserTasks
+  } = useDataCache();
+  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [privileges, setPrivileges] = useState<Privilege[]>([]);
   const [violations, setViolations] = useState<RuleViolation[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dataLoading, setDataLoading] = useState(false); // For partial updates
   const [viewMode, setViewMode] = useState<'personal' | 'family'>('personal');
   const [selectedDate] = useState(new Date());
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedItemType, setSelectedItemType] = useState<'task' | 'privilege' | 'violation' | null>(null);
-
-  // Cache for family data to avoid refetching
-  const [familyDataCache, setFamilyDataCache] = useState<{
-    tasks: Task[] | null;
-    privileges: Privilege[] | null;
-    violations: RuleViolation[] | null;
-  }>({
-    tasks: null,
-    privileges: null,
-    violations: null
-  });
 
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
@@ -83,181 +75,46 @@ const Calendar: React.FC = () => {
     }
   }, [authState.currentUser, children, selectedChild, viewMode]);
 
-  // Initial data loading only
+  // Update displayed data when cache or view mode changes
   useEffect(() => {
-    const fetchInitialData = async () => {
-      if (!authState.currentUser) return;
-      setLoading(true);
-      try {
-        // Fetch rules (only once)
-        const fetchedRules = await ruleService.getRules();
-        setRules(fetchedRules);
+    if (!authState.currentUser || initialLoading) return;
 
-        // Fetch family data and cache it
-        const [tasksResponse, privilegesResponse, violationsResponse] = await Promise.all([
-          taskService.getTasksForCalendar(),
-          privilegeService.getPrivilegesForCalendar(),
-          ruleViolationService.getRuleViolationsForCalendar()
-        ]);
-
-        const allTasks = Array.isArray(tasksResponse) ? tasksResponse : [];
-        const allPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : [];
-        const allViolations = Array.isArray(violationsResponse) ? violationsResponse : [];
-
-        // Cache family data
-        setFamilyDataCache({
-          tasks: allTasks,
-          privileges: allPrivileges,
-          violations: allViolations
-        });
-
-        // Set initial data based on current view mode
-        if (viewMode === 'family') {
-          setTasks(allTasks);
-          setPrivileges(allPrivileges);
-          setViolations(allViolations);
-        } else {
-          // Personal view - filter data
-          const userId = authState.currentUser.isParent && selectedChild 
-            ? selectedChild 
-            : authState.currentUser.id;
-          
-          const filteredTasks = allTasks.filter(task => task.assignedTo.includes(userId));
-          setTasks(filteredTasks);
-
-          // For personal view, we still need to fetch individual privileges and violations
-          try {
-            const personalPrivilegesResponse = await privilegeService.getUserPrivileges(userId);
-            const personalViolationsResponse = await ruleViolationService.getChildRuleViolations(userId);
-            
-            setPrivileges(Array.isArray(personalPrivilegesResponse) ? personalPrivilegesResponse : (personalPrivilegesResponse.privileges || []));
-            setViolations(Array.isArray(personalViolationsResponse) ? personalViolationsResponse : (personalViolationsResponse.violations || []));
-          } catch (err) {
-            console.error('Error fetching personal data:', err);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching initial data:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInitialData();
-  }, [authState.currentUser]); // Only depend on current user for initial load
-
-  // Handle view mode and selected child changes (without full reload)
-  useEffect(() => {
-    const updateViewData = async () => {
-      if (!authState.currentUser || loading) return; // Skip if still loading initially
+    if (viewMode === 'family') {
+      // Family view - show all data
+      setTasks(familyTasks || []);
+      setPrivileges(familyPrivileges || []);
+      setViolations(familyViolations || []);
+    } else {
+      // Personal view - filter data for specific user
+      const userId = authState.currentUser.isParent && selectedChild 
+        ? selectedChild 
+        : authState.currentUser.id;
       
-      setDataLoading(true);
-      try {
-        if (viewMode === 'family') {
-          // Use cached family data
-          if (familyDataCache.tasks) {
-            setTasks(familyDataCache.tasks);
-            setPrivileges(familyDataCache.privileges || []);
-            setViolations(familyDataCache.violations || []);
-          }
-        } else {
-          // Personal view - filter from cache or fetch if needed
-          const userId = authState.currentUser.isParent && selectedChild 
-            ? selectedChild 
-            : authState.currentUser.id;
-
-          if (familyDataCache.tasks) {
-            // Filter tasks from cache
-            const filteredTasks = familyDataCache.tasks.filter(task => task.assignedTo.includes(userId));
-            setTasks(filteredTasks);
-          }
-
-          // Fetch fresh personal privileges and violations
-          try {
-            const [personalPrivilegesResponse, personalViolationsResponse] = await Promise.all([
-              privilegeService.getUserPrivileges(userId),
-              ruleViolationService.getChildRuleViolations(userId)
-            ]);
-            
-            setPrivileges(Array.isArray(personalPrivilegesResponse) ? personalPrivilegesResponse : (personalPrivilegesResponse.privileges || []));
-            setViolations(Array.isArray(personalViolationsResponse) ? personalViolationsResponse : (personalViolationsResponse.violations || []));
-          } catch (err) {
-            console.error('Error fetching personal data:', err);
-          }
-        }
-      } finally {
-        setDataLoading(false);
-      }
-    };
-
-    updateViewData();
-  }, [viewMode, selectedChild, familyDataCache]); // React to view changes
-
-  // Subscription for real-time updates (separate from view changes)
-  useEffect(() => {
-    if (!authState.currentUser) return;
-
-    const unsubscribeTasks = taskService.subscribe(() => {
-      // Refresh family data cache
-      taskService.getTasksForCalendar().then(response => {
-        const allTasks = Array.isArray(response) ? response : [];
-        setFamilyDataCache(prev => ({ ...prev, tasks: allTasks }));
-        
-        // Update current view
-        if (viewMode === 'family') {
-          setTasks(allTasks);
-        } else if (authState.currentUser) {
-          const userId = authState.currentUser.isParent && selectedChild 
-            ? selectedChild 
-            : authState.currentUser.id;
-          const filteredTasks = allTasks.filter(task => task.assignedTo.includes(userId));
-          setTasks(filteredTasks);
-        }
-      });
-    });
-
-    const unsubscribePrivileges = privilegeService.subscribe(() => {
-      if (viewMode === 'family') {
-        privilegeService.getPrivilegesForCalendar().then(response => {
-          const privileges = Array.isArray(response) ? response : [];
-          setFamilyDataCache(prev => ({ ...prev, privileges }));
-          setPrivileges(privileges);
-        });
-      } else if (authState.currentUser) {
-        const userId = authState.currentUser.isParent && selectedChild 
-          ? selectedChild 
-          : authState.currentUser.id;
-        privilegeService.getUserPrivileges(userId).then(response => {
-          const privileges = Array.isArray(response) ? response : (response.privileges || []);
-          setPrivileges(privileges);
-        });
-      }
-    });
-
-    const unsubscribeViolations = ruleViolationService.subscribe(() => {
-      if (viewMode === 'family') {
-        ruleViolationService.getRuleViolationsForCalendar().then(response => {
-          const violations = Array.isArray(response) ? response : [];
-          setFamilyDataCache(prev => ({ ...prev, violations }));
-          setViolations(violations);
-        });
-      } else if (authState.currentUser) {
-        const userId = authState.currentUser.isParent && selectedChild 
-          ? selectedChild 
-          : authState.currentUser.id;
-        ruleViolationService.getChildRuleViolations(userId).then(response => {
-          const violations = Array.isArray(response) ? response : (response.violations || []);
-          setViolations(violations);
-        });
-      }
-    });
-
-    return () => {
-      unsubscribeTasks();
-      unsubscribePrivileges();
-      unsubscribeViolations();
-    };
-  }, [authState.currentUser, viewMode, selectedChild]);
+      // Use cached data for tasks
+      const userTasks = getUserTasks(userId);
+      setTasks(userTasks);
+      
+      // Filter privileges and violations for the user
+      const userPrivileges = (familyPrivileges || []).filter(privilege => 
+        privilege.assignedTo === userId && privilege.canView !== false
+      );
+      const userViolations = (familyViolations || []).filter(violation => 
+        violation.childId === userId && violation.canView !== false
+      );
+      
+      setPrivileges(userPrivileges);
+      setViolations(userViolations);
+    }
+  }, [
+    authState.currentUser, 
+    familyTasks, 
+    familyPrivileges, 
+    familyViolations, 
+    viewMode, 
+    selectedChild, 
+    initialLoading,
+    getUserTasks
+  ]);
 
   const handleViewModeChange = (
     _: React.MouseEvent<HTMLElement>,
@@ -289,7 +146,7 @@ const Calendar: React.FC = () => {
       } else {
         await taskService.completeTask(task.id);
       }
-      // La mise à jour des tâches sera gérée par l'abonnement
+      // La mise à jour des tâches sera gérée par l'abonnement du cache
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
@@ -337,13 +194,13 @@ const Calendar: React.FC = () => {
 
   // Fonction pour obtenir le nom de la règle à partir de son ID
   const getRuleName = (ruleId: string): string => {
-    const rule = rules.find(r => r.id === ruleId);
+    const rule = rules?.find(r => r.id === ruleId);
     return rule ? rule.description : ruleId;
   };
 
   console.log('Calendar tasks to display:', tasks);
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <Layout>
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>

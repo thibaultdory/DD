@@ -5,6 +5,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { fr } from 'date-fns/locale';
 import { AuthProvider } from './contexts/AuthContext';
+import { DataCacheProvider } from './contexts/DataCacheContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
@@ -36,116 +37,118 @@ const App: React.FC = () => {
       <CssBaseline />
       <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={fr}>
         <AuthProvider>
-          <Router>
-            <Routes>
-              {/* Page de connexion */}
-              <Route path="/login" element={<Login />} />
-              
-              {/* Routes protegees (necessitent une authentification) */}
-              <Route 
-                path="/" 
-                element={
-                  <ProtectedRoute>
-                    <Home />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/calendar" 
-                element={
-                  <ProtectedRoute>
-                    <Calendar />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/contracts" 
-                element={
-                  <ProtectedRoute requireParent>
-                    <Contracts />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/wallet" 
-                element={
-                  <ProtectedRoute>
-                    <Wallet />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/profile" 
-                element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                } 
-              />
+          <DataCacheProvider>
+            <Router>
+              <Routes>
+                {/* Page de connexion */}
+                <Route path="/login" element={<Login />} />
+                
+                {/* Routes protegees (necessitent une authentification) */}
+                <Route 
+                  path="/" 
+                  element={
+                    <ProtectedRoute>
+                      <Home />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/calendar" 
+                  element={
+                    <ProtectedRoute>
+                      <Calendar />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/contracts" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <Contracts />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/wallet" 
+                  element={
+                    <ProtectedRoute>
+                      <Wallet />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/profile" 
+                  element={
+                    <ProtectedRoute>
+                      <Profile />
+                    </ProtectedRoute>
+                  } 
+                />
 
-              {/* Formulaires */}
-              <Route 
-                path="/tasks/new" 
-                element={
-                  <ProtectedRoute requireParent>
-                    <TaskForm />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/tasks/edit/:taskId" 
-                element={
-                  <ProtectedRoute requireParent>
-                    <TaskForm />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/privileges/new" 
-                element={
-                  <ProtectedRoute requireParent>
-                    <PrivilegeForm />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/privileges/edit/:privilegeId" 
-                element={
-                  <ProtectedRoute requireParent>
-                    <PrivilegeForm />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/violations/new" 
-                element={
-                  <ProtectedRoute requireParent>
-                    <ViolationForm />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/violations/edit/:violationId" 
-                element={
-                  <ProtectedRoute requireParent>
-                    <ViolationForm />
-                  </ProtectedRoute>
-                } 
-              />
-              
-              {/* Redirection par defaut */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Router>
+                {/* Formulaires */}
+                <Route 
+                  path="/tasks/new" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <TaskForm />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/tasks/edit/:taskId" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <TaskForm />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/privileges/new" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <PrivilegeForm />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/privileges/edit/:privilegeId" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <PrivilegeForm />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/violations/new" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <ViolationForm />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/violations/edit/:violationId" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <ViolationForm />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                {/* Redirection par defaut */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Router>
+          </DataCacheProvider>
         </AuthProvider>
       </LocalizationProvider>
     </ThemeProvider>
