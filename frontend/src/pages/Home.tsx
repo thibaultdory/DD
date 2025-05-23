@@ -78,6 +78,7 @@ const Home: React.FC = () => {
   const { authState } = useAuth();
   const navigate = useNavigate();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolled = useRef(false);
   
   const {
     familyTasks, 
@@ -194,10 +195,15 @@ const Home: React.FC = () => {
     const loadInitialData = async () => {
       setLoading(true);
       try {
-        const startDateStr = format(dateRange.start, 'yyyy-MM-dd');
-        const endDateStr = format(dateRange.end, 'yyyy-MM-dd');
+        const initialStart = subDays(new Date(), 7);
+        const initialEnd = addDays(new Date(), 14);
+        const startDateStr = format(initialStart, 'yyyy-MM-dd');
+        const endDateStr = format(initialEnd, 'yyyy-MM-dd');
         
         await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+        
+        // Set the date range after successful load
+        setDateRange({ start: initialStart, end: initialEnd });
       } catch (error) {
         console.error('Error loading initial timeline data:', error);
       } finally {
@@ -206,7 +212,7 @@ const Home: React.FC = () => {
     };
     
     loadInitialData();
-  }, [authState.currentUser, initialLoading, refreshFamilyDataForDateRange, dateRange]);
+  }, [authState.currentUser, initialLoading, refreshFamilyDataForDateRange]);
 
   // Update timeline when data or filters change
   useEffect(() => {
@@ -215,9 +221,9 @@ const Home: React.FC = () => {
     setTimelineItems(items);
   }, [familyTasks, familyViolations, selectedChild, createTimelineItems, getFilteredData]);
 
-  // Auto-scroll to today's items on initial load
+  // Auto-scroll to today's items on initial load (only once)
   useEffect(() => {
-    if (timelineItems.length > 0 && !loading) {
+    if (timelineItems.length > 0 && !loading && !initialLoading && !hasAutoScrolled.current) {
       const timer = setTimeout(() => {
         const todayItem = timelineItems.find(item => 
           isSameDay(parseISO(item.date), new Date())
@@ -232,11 +238,13 @@ const Home: React.FC = () => {
             });
           }
         }
-      }, 300);
+      }, 500); // Increased timeout to ensure data is rendered
+      
+      hasAutoScrolled.current = true;
       
       return () => clearTimeout(timer);
     }
-  }, [timelineItems, loading]);
+  }, [timelineItems, loading, initialLoading]); // Proper dependencies
 
   // Load more data in past direction
   const loadPastData = useCallback(async () => {
@@ -280,13 +288,13 @@ const Home: React.FC = () => {
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     
-    // Near top - load past data
-    if (scrollTop < 200 && !loadingPast) {
+    // Near top - load past data (increased threshold to be less aggressive)
+    if (scrollTop < 100 && !loadingPast) {
       loadPastData();
     }
     
-    // Near bottom - load future data
-    if (scrollHeight - scrollTop - clientHeight < 200 && !loadingFuture) {
+    // Near bottom - load future data (increased threshold to be less aggressive)
+    if (scrollHeight - scrollTop - clientHeight < 100 && !loadingFuture) {
       loadFutureData();
     }
   }, [loadingPast, loadingFuture, loadPastData, loadFutureData]);
