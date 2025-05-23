@@ -124,11 +124,41 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
       ]);
 
       setRules(rulesResponse);
-      setFamilyTasks(Array.isArray(tasksResponse) ? tasksResponse : []);
-      setFamilyPrivileges(Array.isArray(privilegesResponse) ? privilegesResponse : []);
-      setFamilyViolations(Array.isArray(violationsResponse) ? violationsResponse : []);
+
+      // Merge tasks, ensuring uniqueness and preferring newer items
+      setFamilyTasks(prevFamilyTasks => {
+        const newTasks = Array.isArray(tasksResponse) ? tasksResponse : [];
+        if (!prevFamilyTasks) return newTasks;
+
+        const taskMap = new Map<string, Task>();
+        prevFamilyTasks.forEach(task => taskMap.set(task.id, task));
+        newTasks.forEach(task => taskMap.set(task.id, task)); // New tasks overwrite old if IDs match
+        return Array.from(taskMap.values());
+      });
+
+      // Merge privileges, ensuring uniqueness and preferring newer items
+      setFamilyPrivileges(prevFamilyPrivileges => {
+        const newPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : [];
+        if (!prevFamilyPrivileges) return newPrivileges;
+
+        const privilegeMap = new Map<string, Privilege>();
+        prevFamilyPrivileges.forEach(privilege => privilegeMap.set(privilege.id, privilege));
+        newPrivileges.forEach(privilege => privilegeMap.set(privilege.id, privilege)); // New privileges overwrite old
+        return Array.from(privilegeMap.values());
+      });
+
+      // Merge violations, ensuring uniqueness and preferring newer items
+      setFamilyViolations(prevFamilyViolations => {
+        const newViolations = Array.isArray(violationsResponse) ? violationsResponse : [];
+        if (!prevFamilyViolations) return newViolations;
+
+        const violationMap = new Map<string, RuleViolation>();
+        prevFamilyViolations.forEach(violation => violationMap.set(violation.id, violation));
+        newViolations.forEach(violation => violationMap.set(violation.id, violation)); // New violations overwrite old
+        return Array.from(violationMap.values());
+      });
       
-      console.log(`[DataCache] Date range refresh completed: ${startDate} to ${endDate}`);
+      console.log(`[DataCache] Date range refresh completed and data merged: ${startDate} to ${endDate}`);
     } catch (error) {
       console.error('Error refreshing family data for date range:', error);
     } finally {
