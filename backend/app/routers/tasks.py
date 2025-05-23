@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_parent
 from app.models.task import Task, task_assignments
@@ -35,19 +35,49 @@ async def serialize_task(task: Task, db: AsyncSession):
     }
 
 @router.get("/tasks")
-async def get_tasks(parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Task))
-    tasks = result.scalars().all()
-    return [await serialize_task(t, db) for t in tasks]
-
-@router.get("/tasks/user/{user_id}")
-async def get_user_tasks(user_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if not (current_user.is_parent or current_user.id == user_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    stmt = select(Task).join(task_assignments).where(task_assignments.c.user_id == user_id)
+async def get_tasks(
+    parent: User = Depends(require_parent),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100)
+):
+    # Get total count efficiently
+    total_result = await db.execute(select(func.count()).select_from(Task))
+    total = total_result.scalar_one()
+    # Get paginated tasks
+    stmt = select(Task).offset((page - 1) * limit).limit(limit)
     result = await db.execute(stmt)
     tasks = result.scalars().all()
-    return [await serialize_task(t, db) for t in tasks]
+    return {
+        "tasks": [await serialize_task(t, db) for t in tasks],
+        "total": total
+    }
+
+@router.get("/tasks/user/{user_id}")
+async def get_user_tasks(
+    user_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100)
+):
+    logger.info(f"get_user_tasks called for user_id={user_id}, current_user.id={current_user.id}, is_parent={current_user.is_parent}")
+    if not (current_user.is_parent or current_user.id == user_id):
+        logger.warning(f"User {current_user.id} not authorized to access tasks for user {user_id}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    # Get total count efficiently
+    total_stmt = select(func.count()).select_from(Task).join(task_assignments).where(task_assignments.c.user_id == user_id)
+    total_result = await db.execute(total_stmt)
+    total = total_result.scalar_one()
+    # Get paginated tasks
+    stmt = select(Task).join(task_assignments).where(task_assignments.c.user_id == user_id).offset((page - 1) * limit).limit(limit)
+    result = await db.execute(stmt)
+    tasks = result.scalars().all()
+    logger.info(f"Returning {len(tasks)} tasks for user {user_id} (total: {total})")
+    return {
+        "tasks": [await serialize_task(t, db) for t in tasks],
+        "total": total
+    }
 
 @router.get("/tasks/date/{due_date}")
 async def get_tasks_by_date(due_date: date, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):

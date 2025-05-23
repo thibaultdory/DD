@@ -97,68 +97,74 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!authState.currentUser) return;
+      setLoading(true);
       try {
-        if (authState.currentUser) {
-          // Récupérer les règles (communes à tous)
-          const fetchedRules = await ruleService.getRules();
-          setRules(fetchedRules);
+        // Fetch rules
+        const fetchedRules = await ruleService.getRules();
+        setRules(fetchedRules);
 
-          let tasksData: Task[] = [];
-          let privilegesData: Privilege[] = [];
-          let violationsData: RuleViolation[] = [];
-          let tasksTotal = 0;
-          let privilegesTotal = 0;
-          let violationsTotal = 0;
+        let tasksData: Task[] = [];
+        let privilegesData: Privilege[] = [];
+        let violationsData: RuleViolation[] = [];
+        let tasksTotal = 0;
+        let privilegesTotal = 0;
+        let violationsTotal = 0;
 
-          if (authState.currentUser.isParent) {
-            if (selectedChild) {
-              // Les parents voient les tâches, privilèges et infractions de l'enfant sélectionné
-              const tasksResponse = await taskService.getUserTasks(selectedChild, page, limit);
-              const privilegesResponse = await privilegeService.getUserPrivileges(selectedChild, page, limit);
-              const violationsResponse = await ruleViolationService.getChildRuleViolations(selectedChild, page, limit);
-              
-              tasksData = tasksResponse.tasks || [];
-              tasksTotal = tasksResponse.total || 0;
-              privilegesData = privilegesResponse.privileges || [];
-              privilegesTotal = privilegesResponse.total || 0;
-              violationsData = violationsResponse.violations || [];
-              violationsTotal = violationsResponse.total || 0;
-            } else {
-              // Si aucun enfant n'est sélectionné, afficher toutes les tâches
-              const tasksResponse = await taskService.getTasks(page, limit);
-              const privilegesResponse = await privilegeService.getPrivileges(page, limit);
-              const violationsResponse = await ruleViolationService.getRuleViolations(page, limit);
-              
-              tasksData = tasksResponse.tasks || [];
-              tasksTotal = tasksResponse.total || 0;
-              privilegesData = privilegesResponse.privileges || [];
-              privilegesTotal = privilegesResponse.total || 0;
-              violationsData = violationsResponse.violations || [];
-              violationsTotal = violationsResponse.total || 0;
-            }
+        // Fetch tasks
+        try {
+          let tasksResponse;
+          if (authState.currentUser.isParent && selectedChild) {
+            tasksResponse = await taskService.getUserTasks(selectedChild, page, limit);
+          } else if (authState.currentUser.isParent && !selectedChild) {
+            tasksResponse = await taskService.getTasks(page, limit);
           } else {
-            // Les enfants ne voient que leurs propres tâches, privilèges et infractions
-            const tasksResponse = await taskService.getUserTasks(authState.currentUser.id, page, limit);
-            const privilegesResponse = await privilegeService.getUserPrivileges(authState.currentUser.id, page, limit);
-            const violationsResponse = await ruleViolationService.getChildRuleViolations(authState.currentUser.id, page, limit);
-            
-            tasksData = tasksResponse.tasks || [];
-            tasksTotal = tasksResponse.total || 0;
-            privilegesData = privilegesResponse.privileges || [];
-            privilegesTotal = privilegesResponse.total || 0;
-            violationsData = violationsResponse.violations || [];
-            violationsTotal = violationsResponse.total || 0;
+            tasksResponse = await taskService.getUserTasks(authState.currentUser.id, page, limit);
           }
-
-          setTasks(tasksData);
-          setTotalTasks(tasksTotal);
-          setPrivileges(privilegesData);
-          setTotalPrivileges(privilegesTotal);
-          setViolations(violationsData);
-          setTotalViolations(violationsTotal);
+          tasksData = tasksResponse.tasks || [];
+          tasksTotal = tasksResponse.total || 0;
+        } catch (err) {
+          console.error('Error fetching tasks:', err);
         }
-      } catch (error) {
-        console.error('Error fetching data:', error);
+
+        // Fetch privileges
+        try {
+          let privilegesResponse;
+          if (authState.currentUser.isParent && selectedChild) {
+            privilegesResponse = await privilegeService.getUserPrivileges(selectedChild, page, limit);
+          } else if (authState.currentUser.isParent && !selectedChild) {
+            privilegesResponse = await privilegeService.getPrivileges(page, limit);
+          } else {
+            privilegesResponse = await privilegeService.getUserPrivileges(authState.currentUser.id, page, limit);
+          }
+          privilegesData = privilegesResponse.privileges || [];
+          privilegesTotal = privilegesResponse.total || 0;
+        } catch (err) {
+          console.error('Error fetching privileges:', err);
+        }
+
+        // Fetch violations
+        try {
+          let violationsResponse;
+          if (authState.currentUser.isParent && selectedChild) {
+            violationsResponse = await ruleViolationService.getChildRuleViolations(selectedChild, page, limit);
+          } else if (authState.currentUser.isParent && !selectedChild) {
+            violationsResponse = await ruleViolationService.getRuleViolations(page, limit);
+          } else {
+            violationsResponse = await ruleViolationService.getChildRuleViolations(authState.currentUser.id, page, limit);
+          }
+          violationsData = violationsResponse.violations || [];
+          violationsTotal = violationsResponse.total || 0;
+        } catch (err) {
+          console.error('Error fetching violations:', err);
+        }
+
+        setTasks(tasksData);
+        setTotalTasks(tasksTotal);
+        setPrivileges(privilegesData);
+        setTotalPrivileges(privilegesTotal);
+        setViolations(violationsData);
+        setTotalViolations(violationsTotal);
       } finally {
         setLoading(false);
       }
@@ -274,6 +280,8 @@ const Home: React.FC = () => {
     const user = authState.family.find(u => u.id === userId);
     return user ? user.name : 'Inconnu';
   };
+
+  console.log('Tasks to display:', tasks);
 
   if (loading) {
     return <Typography>Chargement...</Typography>;

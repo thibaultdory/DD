@@ -73,44 +73,68 @@ const Calendar: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!authState.currentUser) return;
+      setLoading(true);
       try {
-        if (authState.currentUser) {
-          // Récupérer les règles (communes à tous)
-          const fetchedRules = await ruleService.getRules();
-          setRules(fetchedRules);
+        // Fetch rules
+        const fetchedRules = await ruleService.getRules();
+        setRules(fetchedRules);
 
-          let fetchedTasks: Task[] = [];
-          let fetchedPrivileges: Privilege[] = [];
-          let fetchedViolations: RuleViolation[] = [];
+        let fetchedTasks: Task[] = [];
+        let fetchedPrivileges: Privilege[] = [];
+        let fetchedViolations: RuleViolation[] = [];
 
+        // Fetch tasks
+        try {
+          let tasksResponse;
           if (viewMode === 'personal') {
-            // Vue personnelle
             const userId = authState.currentUser.isParent && selectedChild 
               ? selectedChild 
               : authState.currentUser.id;
-            
-            const tasksResponse = await taskService.getUserTasks(userId);
-            fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
-            const privilegesResponse = await privilegeService.getUserPrivileges(userId);
-            fetchedPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
-            const violationsResponse = await ruleViolationService.getChildRuleViolations(userId);
-            fetchedViolations = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
+            tasksResponse = await taskService.getUserTasks(userId);
           } else {
-            // Vue familiale
-            const tasksResponse = await taskService.getTasks();
-            fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
-            const privilegesResponse = await privilegeService.getPrivileges();
-            fetchedPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
-            const violationsResponse = await ruleViolationService.getRuleViolations();
-            fetchedViolations = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
+            tasksResponse = await taskService.getTasks();
           }
-
-          setTasks(Array.isArray(fetchedTasks) ? fetchedTasks : []);
-          setPrivileges(Array.isArray(fetchedPrivileges) ? fetchedPrivileges : []);
-          setViolations(Array.isArray(fetchedViolations) ? fetchedViolations : []);
+          fetchedTasks = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
+        } catch (err) {
+          console.error('Error fetching tasks:', err);
         }
-      } catch (error) {
-        console.error('Error fetching calendar data:', error);
+
+        // Fetch privileges
+        try {
+          let privilegesResponse;
+          if (viewMode === 'personal') {
+            const userId = authState.currentUser.isParent && selectedChild 
+              ? selectedChild 
+              : authState.currentUser.id;
+            privilegesResponse = await privilegeService.getUserPrivileges(userId);
+          } else {
+            privilegesResponse = await privilegeService.getPrivileges();
+          }
+          fetchedPrivileges = Array.isArray(privilegesResponse) ? privilegesResponse : (privilegesResponse.privileges || []);
+        } catch (err) {
+          console.error('Error fetching privileges:', err);
+        }
+
+        // Fetch violations
+        try {
+          let violationsResponse;
+          if (viewMode === 'personal') {
+            const userId = authState.currentUser.isParent && selectedChild 
+              ? selectedChild 
+              : authState.currentUser.id;
+            violationsResponse = await ruleViolationService.getChildRuleViolations(userId);
+          } else {
+            violationsResponse = await ruleViolationService.getRuleViolations();
+          }
+          fetchedViolations = Array.isArray(violationsResponse) ? violationsResponse : (violationsResponse.violations || []);
+        } catch (err) {
+          console.error('Error fetching violations:', err);
+        }
+
+        setTasks(Array.isArray(fetchedTasks) ? fetchedTasks : []);
+        setPrivileges(Array.isArray(fetchedPrivileges) ? fetchedPrivileges : []);
+        setViolations(Array.isArray(fetchedViolations) ? fetchedViolations : []);
       } finally {
         setLoading(false);
       }
@@ -248,6 +272,8 @@ const Calendar: React.FC = () => {
     const rule = rules.find(r => r.id === ruleId);
     return rule ? rule.description : ruleId;
   };
+
+  console.log('Calendar tasks to display:', tasks);
 
   if (loading) {
     return <Typography>Chargement...</Typography>;

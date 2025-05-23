@@ -144,17 +144,10 @@ export const taskService = {
         total: mockTasks.length
       };
     }
-    
     const response = await api.get('/tasks', {
       params: { page, limit }
     });
-    // Adapter la réponse au format attendu
-    const tasks = Array.isArray(response.data) ? response.data : [];
-    const result = {
-      tasks: tasks.slice((page - 1) * limit, page * limit),
-      total: tasks.length
-    };
-    return result;
+    return response.data;
   },
 
   // Récupérer les tâches d'un utilisateur spécifique avec pagination
@@ -169,17 +162,10 @@ export const taskService = {
         total: userTasks.length
       };
     }
-    
     const response = await api.get(`/tasks/user/${userId}`, {
       params: { page, limit }
     });
-    // Adapter la réponse au format attendu
-    const tasks = Array.isArray(response.data) ? response.data : [];
-    const result = {
-      tasks: tasks.slice((page - 1) * limit, page * limit),
-      total: tasks.length
-    };
-    return result;
+    return response.data;
   },
 
   // Récupérer les tâches pour une date spécifique
