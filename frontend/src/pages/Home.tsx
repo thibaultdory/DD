@@ -144,6 +144,11 @@ const Home: React.FC = () => {
       startDate: format(startDate, 'yyyy-MM-dd'),
       endDate: format(endDate, 'yyyy-MM-dd')
     });
+
+    // Log all incoming task due dates for this specific call
+    if (tasks.length > 0) {
+      console.log('[TimelineDebug] Incoming task dueDates for this range creation:', tasks.map(t => t.dueDate));
+    }
     
     const items: TimelineItem[] = [];
     // Normalize range dates to the start of the day for accurate comparison
