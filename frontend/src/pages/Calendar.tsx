@@ -154,18 +154,19 @@ const Calendar: React.FC = () => {
       const startDateStr = format(startDate, 'yyyy-MM-dd');
       const endDateStr = format(endDate, 'yyyy-MM-dd');
       
-      console.log(`Fetching data for period: ${startDateStr} to ${endDateStr}`);
+      console.log(`[Calendar] Fetching data for period: ${startDateStr} to ${endDateStr} (view: ${calendarView})`);
       
       try {
         // Use the new date range fetching method
         await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+        console.log(`[Calendar] Data fetch completed for period: ${startDateStr} to ${endDateStr}`);
       } catch (error) {
         console.error('Error fetching data for current period:', error);
       }
     };
 
     // Debounce the fetch to avoid excessive calls during rapid navigation
-    const timeoutId = setTimeout(fetchDataForCurrentPeriod, 100);
+    const timeoutId = setTimeout(fetchDataForCurrentPeriod, 300);
     return () => clearTimeout(timeoutId);
   }, [selectedDate, calendarView, authState.currentUser, initialLoading, refreshFamilyDataForDateRange]);
 
