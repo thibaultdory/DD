@@ -354,6 +354,19 @@ const Home: React.FC = () => {
     setTimelineItems(items);
   }, [selectedChild]); // Only depend on selectedChild, not all the data
 
+  // Handle data changes - recreate timeline when family data changes
+  useEffect(() => {
+    if (!initialTimelineLoaded || !familyTasks || !familyViolations) return;
+    
+    console.log('[Timeline] Family data changed, recreating timeline');
+    
+    const { tasks, violations } = getFilteredData();
+    const items = createTimelineItemsForRange(tasks, violations, dateRange.start, dateRange.end);
+    
+    console.log('[Timeline] Setting updated timeline items:', items.length);
+    setTimelineItems(items);
+  }, [familyTasks, familyViolations, getFilteredData, createTimelineItemsForRange, dateRange, initialTimelineLoaded]); // React to data changes
+
   // useLayoutEffect for scroll stabilization after timelineItems change
   useLayoutEffect(() => {
     if (!scrollContainerRef.current || !loadTypeRef.current) {
@@ -679,6 +692,12 @@ const Home: React.FC = () => {
       } else {
         await taskService.completeTask(task.id);
       }
+      
+      // Refresh the timeline data to reflect the changes
+      const startDateStr = format(dateRange.start, 'yyyy-MM-dd');
+      const endDateStr = format(dateRange.end, 'yyyy-MM-dd');
+      await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
@@ -709,6 +728,12 @@ const Home: React.FC = () => {
       await taskService.deleteTask(taskToDelete.id, deleteFuture);
       setDeleteDialogOpen(false);
       setTaskToDelete(null);
+      
+      // Refresh the timeline data to reflect the changes
+      const startDateStr = format(dateRange.start, 'yyyy-MM-dd');
+      const endDateStr = format(dateRange.end, 'yyyy-MM-dd');
+      await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      
     } catch (error) {
       console.error('Error deleting task:', error);
     }
