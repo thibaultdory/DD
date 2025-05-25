@@ -7,7 +7,6 @@ import {
   List, 
   ListItem, 
   ListItemText, 
-  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -18,11 +17,8 @@ import {
   Select,
   MenuItem,
   Chip,
-  IconButton,
   Grid,
-  FormControlLabel,
   Checkbox,
-  FormGroup,
   Card,
   CardContent,
   CardActions,
@@ -224,10 +220,6 @@ const Contracts: React.FC = () => {
 
   const getParents = () => {
     return authState.family.filter(user => user.isParent);
-  };
-
-  const getSelectedRules = () => {
-    return availableRules.filter(rule => formData.ruleIds.includes(rule.id));
   };
 
   if (loading) {
