@@ -45,15 +45,20 @@ class RuleViolationCreate(BaseModel):
     description: Optional[str]
     reportedBy: UUID
 
-class ContractRuleCreate(BaseModel):
+class RuleCreate(BaseModel):
     description: str
     isTask: bool
+
+class RuleUpdate(BaseModel):
+    description: Optional[str]
+    isTask: Optional[bool]
+    active: Optional[bool]
 
 class ContractCreate(BaseModel):
     title: str
     childId: UUID
     parentId: UUID
-    rules: List[ContractRuleCreate]
+    ruleIds: List[UUID]  # Changed from embedded rules to rule IDs
     dailyReward: float
     startDate: date
     endDate: date
@@ -62,6 +67,7 @@ class ContractUpdate(BaseModel):
     title: Optional[str]
     childId: Optional[UUID]
     parentId: Optional[UUID]
+    ruleIds: Optional[List[UUID]]  # Changed from embedded rules to rule IDs
     dailyReward: Optional[float]
     startDate: Optional[date]
     endDate: Optional[date]

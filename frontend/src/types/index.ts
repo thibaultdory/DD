@@ -53,6 +53,7 @@ export interface Rule {
   id: string;
   description: string;
   isTask: boolean; // Si true, c'est une tâche qui doit être complétée
+  active: boolean; // Si true, la règle est active et peut être utilisée
 }
 
 export interface Contract {

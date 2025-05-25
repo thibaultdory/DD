@@ -90,7 +90,10 @@ const Header: React.FC = () => {
                   <MenuItem onClick={() => handleNavigation('/')}>Accueil</MenuItem>
                   <MenuItem onClick={() => handleNavigation('/calendar')}>Calendrier</MenuItem>
                   {authState.currentUser?.isParent && (
-                    <MenuItem onClick={() => handleNavigation('/contracts')}>Contrats</MenuItem>
+                    <>
+                      <MenuItem onClick={() => handleNavigation('/contracts')}>Contrats</MenuItem>
+                      <MenuItem onClick={() => handleNavigation('/rules')}>Règles</MenuItem>
+                    </>
                   )}
                   <MenuItem onClick={handleProfile}>Profil</MenuItem>
                   {!authState.currentUser?.isParent && (
@@ -119,13 +122,22 @@ const Header: React.FC = () => {
                   Calendrier
                 </Button>
                 {authState.currentUser?.isParent && (
-                  <Button 
-                    color="inherit" 
-                    onClick={() => navigate('/contracts')}
-                    sx={{ whiteSpace: 'nowrap' }}
-                  >
-                    Contrats
-                  </Button>
+                  <>
+                    <Button 
+                      color="inherit" 
+                      onClick={() => navigate('/contracts')}
+                      sx={{ whiteSpace: 'nowrap' }}
+                    >
+                      Contrats
+                    </Button>
+                    <Button 
+                      color="inherit" 
+                      onClick={() => navigate('/rules')}
+                      sx={{ whiteSpace: 'nowrap' }}
+                    >
+                      Règles
+                    </Button>
+                  </>
                 )}
                 <IconButton
                   size="large"

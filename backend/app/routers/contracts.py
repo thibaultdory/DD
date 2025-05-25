@@ -7,9 +7,9 @@ import logging # Import logging
 from app.core.database import get_db
 from app.core.dependencies import require_parent
 from app.models.contract import Contract
-from app.models.contract_rule import ContractRule
+from app.models.rule import Rule
 from app.models.wallet import WalletTransaction
-from app.schemas import ContractCreate, ContractUpdate, ContractRuleCreate
+from app.schemas import ContractCreate, ContractUpdate
 
 logger = logging.getLogger(__name__) # Add logger instance
 router = APIRouter()
@@ -53,6 +53,13 @@ async def get_child_contracts(child_id: UUID, parent=Depends(require_parent), db
 @router.post("/contracts")
 async def create_contract(data: ContractCreate, parent=Depends(require_parent), db: AsyncSession = Depends(get_db)):
     try:
+        # Verify that all rule IDs exist
+        rule_result = await db.execute(select(Rule).where(Rule.id.in_(data.ruleIds), Rule.active == True))
+        rules = rule_result.scalars().all()
+        
+        if len(rules) != len(data.ruleIds):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="One or more rule IDs are invalid or inactive")
+        
         contract = Contract(
             title=data.title,
             child_id=data.childId,
@@ -63,14 +70,10 @@ async def create_contract(data: ContractCreate, parent=Depends(require_parent), 
             active=True,
         )
         db.add(contract)
-        await db.flush() # Flush to get the contract ID for rules
-        logger.info(f"Creating contract '{data.title}' for child {data.childId}")
-
-        # add rules
-        for r in data.rules:
-            rule = ContractRule(description=r.description, is_task=r.isTask, contract_id=contract.id)
-            db.add(rule)
-            logger.debug(f"Adding rule '{r.description}' to contract {contract.id}")
+        await db.flush()  # Flush to get the contract ID
+        
+        # Associate rules with the contract
+        contract.rules = rules
         
         await db.commit()
         
@@ -78,8 +81,11 @@ async def create_contract(data: ContractCreate, parent=Depends(require_parent), 
         result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract.id))
         contract = result.scalar_one()
         
-        logger.info(f"Successfully created contract {contract.id}")
+        logger.info(f"Successfully created contract {contract.id} with {len(rules)} rules")
         return serialize_contract(contract)
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
         logger.error(f"Failed to create contract: {e}", exc_info=True)
         await db.rollback()
@@ -95,6 +101,19 @@ async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depend
     try:
         updates = data.dict(exclude_unset=True)
         logger.info(f"Updating contract {contract_id} with data: {updates}")
+        
+        # Handle rule updates separately
+        if 'ruleIds' in updates:
+            rule_ids = updates.pop('ruleIds')
+            # Verify that all rule IDs exist
+            rule_result = await db.execute(select(Rule).where(Rule.id.in_(rule_ids), Rule.active == True))
+            rules = rule_result.scalars().all()
+            
+            if len(rules) != len(rule_ids):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="One or more rule IDs are invalid or inactive")
+            
+            contract.rules = rules
+        
         for field, value in updates.items():
             # Adjust field names from schema (camelCase) to model (snake_case)
             model_field = field
@@ -107,7 +126,7 @@ async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depend
             elif field == 'childId':
                 model_field = 'child_id'
             elif field == 'parentId':
-                 model_field = 'parent_id'
+                model_field = 'parent_id'
             
             if hasattr(contract, model_field):
                 setattr(contract, model_field, value)
@@ -122,6 +141,9 @@ async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depend
         
         logger.info(f"Successfully updated contract {contract_id}")
         return serialize_contract(contract)
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
         logger.error(f"Failed to update contract {contract_id}: {e}", exc_info=True)
         await db.rollback()
@@ -169,7 +191,7 @@ async def delete_contract(contract_id: UUID, parent=Depends(require_parent), db:
         )
         logger.debug(f"Updated wallet transactions to remove contract reference for contract {contract_id}")
         
-        # Delete the contract (rules will be automatically deleted due to cascade)
+        # Delete the contract (rules association will be automatically removed)
         await db.delete(contract)
         await db.commit()
         

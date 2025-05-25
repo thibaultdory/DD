@@ -117,6 +117,51 @@ export const ruleService = {
     
     const response = await api.get(`/rules/${ruleId}`);
     return response.data;
+  },
+
+  // Créer une nouvelle règle (parents uniquement)
+  async createRule(rule: Omit<Rule, 'id' | 'active'>): Promise<Rule> {
+    if (USE_MOCK_DATA) {
+      const newRule: Rule = {
+        ...rule,
+        id: `rule${mockRules.length + 1}`,
+        active: true
+      };
+      mockRules.push(newRule);
+      return newRule;
+    }
+    
+    const response = await api.post('/rules', rule);
+    return response.data;
+  },
+
+  // Mettre à jour une règle (parents uniquement)
+  async updateRule(ruleId: string, updates: Partial<Rule>): Promise<Rule> {
+    if (USE_MOCK_DATA) {
+      const index = mockRules.findIndex(r => r.id === ruleId);
+      if (index !== -1) {
+        mockRules[index] = { ...mockRules[index], ...updates };
+        return mockRules[index];
+      }
+      throw new Error('Rule not found');
+    }
+    
+    const response = await api.put(`/rules/${ruleId}`, updates);
+    return response.data;
+  },
+
+  // Supprimer une règle (parents uniquement)
+  async deleteRule(ruleId: string): Promise<void> {
+    if (USE_MOCK_DATA) {
+      const index = mockRules.findIndex(r => r.id === ruleId);
+      if (index !== -1) {
+        mockRules.splice(index, 1);
+        return;
+      }
+      throw new Error('Rule not found');
+    }
+    
+    await api.delete(`/rules/${ruleId}`);
   }
 };
 
@@ -566,6 +611,28 @@ export const ruleViolationService = {
   }
 };
 
+// Interface for contract creation/update (uses ruleIds)
+interface ContractCreateData {
+  title: string;
+  childId: string;
+  parentId: string;
+  ruleIds: string[];
+  dailyReward: number;
+  startDate: string;
+  endDate: string;
+}
+
+interface ContractUpdateData {
+  title?: string;
+  childId?: string;
+  parentId?: string;
+  ruleIds?: string[];
+  dailyReward?: number;
+  startDate?: string;
+  endDate?: string;
+  active?: boolean;
+}
+
 // Service de gestion des contrats
 export const contractService = {
   // S'abonner aux changements de contrats
@@ -614,29 +681,49 @@ export const contractService = {
   },
 
   // Créer un nouveau contrat (parents uniquement)
-  async createContract(contract: Omit<Contract, 'id'>): Promise<Contract> {
+  async createContract(contractData: ContractCreateData): Promise<Contract> {
     if (USE_MOCK_DATA) {
+      // For mock data, convert ruleIds to rules
+      const rules = mockRules.filter(rule => contractData.ruleIds.includes(rule.id));
       const newContract: Contract = {
-        ...contract,
-        id: `contract${mockContracts.length + 1}`
+        id: `contract${mockContracts.length + 1}`,
+        title: contractData.title,
+        childId: contractData.childId,
+        parentId: contractData.parentId,
+        rules: rules,
+        dailyReward: contractData.dailyReward,
+        startDate: contractData.startDate,
+        endDate: contractData.endDate,
+        active: true
       };
       mockContracts.push(newContract);
       notifyChange('contracts');
       return newContract;
     }
     
-    const response = await api.post('/contracts', contract);
+    const response = await api.post('/contracts', contractData);
     return response.data;
   },
 
   // Mettre à jour un contrat (parents uniquement)
-  async updateContract(contractId: string, updates: Partial<Contract>): Promise<Contract> {
+  async updateContract(contractId: string, updates: ContractUpdateData): Promise<Contract> {
     if (USE_MOCK_DATA) {
       const index = mockContracts.findIndex(c => c.id === contractId);
       if (index !== -1) {
-        mockContracts[index] = { ...mockContracts[index], ...updates };
+        const contract = mockContracts[index];
+        // Handle ruleIds update
+        if (updates.ruleIds) {
+          const rules = mockRules.filter(rule => updates.ruleIds!.includes(rule.id));
+          contract.rules = rules;
+        }
+        // Update other fields
+        Object.keys(updates).forEach(key => {
+          if (key !== 'ruleIds' && updates[key as keyof ContractUpdateData] !== undefined) {
+            (contract as any)[key] = updates[key as keyof ContractUpdateData];
+          }
+        });
         notifyChange('contracts');
-        return mockContracts[index];
+        return contract;
       }
       throw new Error('Contract not found');
     }
