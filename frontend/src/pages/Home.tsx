@@ -354,6 +354,19 @@ const Home: React.FC = () => {
     setTimelineItems(items);
   }, [selectedChild]); // Only depend on selectedChild, not all the data
 
+  // Handle data changes - recreate timeline when family data changes
+  useEffect(() => {
+    if (!initialTimelineLoaded || !familyTasks || !familyViolations) return;
+    
+    console.log('[Timeline] Family data changed, recreating timeline');
+    
+    const { tasks, violations } = getFilteredData();
+    const items = createTimelineItemsForRange(tasks, violations, dateRange.start, dateRange.end);
+    
+    console.log('[Timeline] Setting updated timeline items:', items.length);
+    setTimelineItems(items);
+  }, [familyTasks, familyViolations, getFilteredData, createTimelineItemsForRange, dateRange, initialTimelineLoaded]); // React to data changes
+
   // useLayoutEffect for scroll stabilization after timelineItems change
   useLayoutEffect(() => {
     if (!scrollContainerRef.current || !loadTypeRef.current) {
