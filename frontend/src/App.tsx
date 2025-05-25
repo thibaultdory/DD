@@ -13,6 +13,7 @@ import Login from './pages/Login';
 import Home from './pages/Home';
 import Calendar from './pages/Calendar';
 import Contracts from './pages/Contracts';
+import Rules from './pages/Rules';
 import Wallet from './pages/Wallet';
 import Profile from './pages/Profile';
 import TaskForm from './pages/TaskForm';
@@ -67,6 +68,15 @@ const App: React.FC = () => {
                   element={
                     <ProtectedRoute requireParent>
                       <Contracts />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/rules" 
+                  element={
+                    <ProtectedRoute requireParent>
+                      <Rules />
                     </ProtectedRoute>
                   } 
                 />

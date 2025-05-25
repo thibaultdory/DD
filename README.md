@@ -350,6 +350,151 @@ This guide assumes you have:
    ls -l /path/to/app/backups
    ```
 
+## Scheduler Monitoring
+
+The application includes comprehensive monitoring scripts to track the scheduler's health and status. These scripts help ensure the daily rewards and recurring tasks are processed correctly.
+
+### Monitoring Scripts
+
+#### `scripts/monitor_scheduler.sh` - Start Monitoring
+
+Starts a background process that continuously monitors the scheduler endpoints and logs the results.
+
+**Usage:**
+```bash
+./scripts/monitor_scheduler.sh [start]
+```
+
+**Environment Variables:**
+- `BACKEND_URL` - Backend URL (default: `http://localhost:56000`)
+- `LOG_DIR` - Log directory (default: `./logs`)
+- `MONITOR_INTERVAL` - Check interval in seconds (default: `30`)
+
+**Examples:**
+```bash
+# Start monitoring with default settings
+./scripts/monitor_scheduler.sh
+
+# Start monitoring with custom interval (5 seconds)
+MONITOR_INTERVAL=5 ./scripts/monitor_scheduler.sh
+
+# Start monitoring with custom backend URL
+BACKEND_URL=http://localhost:8000 ./scripts/monitor_scheduler.sh
+
+# Monitor production backend
+BACKEND_URL=https://dd-api.ethzero.club ./scripts/monitor_scheduler.sh
+```
+
+#### `scripts/stop_monitor.sh` - Stop Monitoring
+
+Stops the monitoring process and shows monitoring statistics.
+
+**Usage:**
+```bash
+./scripts/stop_monitor.sh [stop|status]
+```
+
+**Examples:**
+```bash
+# Stop monitoring
+./scripts/stop_monitor.sh
+
+# Check monitoring status
+./scripts/stop_monitor.sh status
+```
+
+### Monitoring Features
+
+#### Health Check Monitoring
+- Calls `/api/health` endpoint every interval
+- Logs full JSON response
+- Shows color-coded console status:
+  - 🟢 **Green**: Scheduler running with lock
+  - 🟡 **Yellow**: Worker process (scheduler not running on this worker)
+  - 🔴 **Red**: Backend unreachable or error
+
+#### Detailed Status Monitoring
+- Calls `/api/scheduler/status` endpoint every interval
+- Logs detailed scheduler information including:
+  - Process and worker information
+  - Job schedules and next run times
+  - Lock file status
+- Shows scheduled jobs in console
+
+#### Log File Format
+The log file contains timestamped entries with:
+- `HEALTH:` - Health endpoint responses
+- `STATUS:` - Detailed status endpoint responses
+- `MONITOR:` - Monitoring process events
+
+**Example log entries:**
+```
+[2025-05-25 19:44:29] 🚀 MONITOR: Starting scheduler monitoring (PID: 12345)
+[2025-05-25 19:44:29] 🔧 MONITOR: Backend URL: http://localhost:56000
+[2025-05-25 19:44:29] 📊 MONITOR: Checking scheduler status...
+[2025-05-25 19:44:29] HEALTH: {"status":"healthy","process_id":1,"scheduler":{"status":"running"}}
+[2025-05-25 19:44:29] STATUS: {"process_info":{"process_id":1},"scheduler":{"running":true}}
+```
+
+### Use Cases
+
+#### Development Monitoring
+Monitor scheduler during development with frequent checks:
+```bash
+MONITOR_INTERVAL=10 ./scripts/monitor_scheduler.sh
+```
+
+#### Production Monitoring
+Monitor scheduler in production with standard interval:
+```bash
+BACKEND_URL=https://dd-api.ethzero.club ./scripts/monitor_scheduler.sh
+```
+
+#### Debugging
+Check detailed scheduler status:
+```bash
+./scripts/stop_monitor.sh status
+tail -f ./logs/scheduler_monitor.log
+```
+
+#### Log Analysis
+View recent monitoring activity:
+```bash
+tail -n 50 ./logs/scheduler_monitor.log
+grep "HEALTH:" ./logs/scheduler_monitor.log | tail -10
+grep "Jobs scheduled" ./logs/scheduler_monitor.log
+```
+
+### Scheduler Architecture
+
+The application uses APScheduler with file-based coordination to prevent duplicate job execution in multi-worker environments:
+
+- **File Lock Coordination**: Uses `fcntl.flock()` with exclusive locks
+- **Lock File**: `/tmp/family_assistant_scheduler.lock`
+- **Worker Coordination**: Only one worker across all processes runs the scheduler
+- **Job Types**:
+  - **Daily Rewards**: Processes contracts and credits wallets (runs at 00:00)
+  - **Recurring Tasks**: Creates task instances for the next week (runs at 00:00)
+
+### Troubleshooting
+
+#### Backend Not Reachable
+- Check if the backend is running: `docker ps`
+- Verify the backend URL and port
+- Check firewall/network connectivity
+
+#### Monitoring Won't Start
+- Check if already running: `./scripts/stop_monitor.sh status`
+- Remove stale PID file: `rm -f ./logs/scheduler_monitor.pid`
+- Check log directory permissions
+
+#### Scheduler Issues
+- Check scheduler logs: `docker compose logs backend | grep SCHEDULER`
+- Verify lock file: `ls -la /tmp/family_assistant_scheduler.lock`
+- Check job execution: `grep "daily_rewards\|recurring_tasks" ./logs/scheduler_monitor.log`
+
+For more detailed monitoring documentation, see [scripts/README.md](scripts/README.md).
+
 ## Documentation
 
 - [API Documentation](docs/API.md)

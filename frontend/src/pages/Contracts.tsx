@@ -7,7 +7,6 @@ import {
   List, 
   ListItem, 
   ListItemText, 
-  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -18,67 +17,73 @@ import {
   Select,
   MenuItem,
   Chip,
-  IconButton,
   Grid,
-  FormControlLabel,
   Checkbox,
-  FormGroup,
   Card,
   CardContent,
-  CardActions
+  CardActions,
+  OutlinedInput,
+  SelectChangeEvent
 } from '@mui/material';
 import { Add, Edit, Delete } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
 import { Contract, Rule } from '../types';
-import { contractService } from '../services/api';
+import { contractService, ruleService } from '../services/api';
 import Layout from '../components/Layout/Layout';
+
+interface ContractFormData {
+  title: string;
+  childId: string;
+  parentId: string;
+  ruleIds: string[];
+  dailyReward: number;
+  startDate: string;
+  endDate: string;
+  active: boolean;
+}
 
 const Contracts: React.FC = () => {
   const { authState } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [availableRules, setAvailableRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
-  const [openRulesDialog, setOpenRulesDialog] = useState(false);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
-  const [formData, setFormData] = useState<Partial<Contract>>({
+  const [formData, setFormData] = useState<ContractFormData>({
     title: '',
     childId: '',
     parentId: '',
-    rules: [],
+    ruleIds: [],
     dailyReward: 1,
     startDate: '',
     endDate: '',
     active: true
   });
-  const [newRule, setNewRule] = useState<Partial<Rule>>({
-    description: '',
-    isTask: false
-  });
 
   useEffect(() => {
-    const fetchContracts = async () => {
+    const fetchData = async () => {
       try {
-        let fetchedContracts: Contract[] = [];
-        
-        if (authState.currentUser?.isParent) {
-          // Les parents voient tous les contrats
-          fetchedContracts = await contractService.getContracts();
-        } else if (authState.currentUser) {
-          // Les enfants ne voient que leurs propres contrats
-          fetchedContracts = await contractService.getChildContracts(authState.currentUser.id);
-        }
+        const [fetchedContracts, fetchedRules] = await Promise.all([
+          authState.currentUser?.isParent 
+            ? contractService.getContracts()
+            : authState.currentUser 
+              ? contractService.getChildContracts(authState.currentUser.id)
+              : [],
+          ruleService.getRules()
+        ]);
         
         setContracts(fetchedContracts);
+        setAvailableRules(fetchedRules);
       } catch (error) {
-        console.error('Error fetching contracts:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchContracts();
+    fetchData();
   }, [authState.currentUser]);
 
   const handleOpenDialog = (contract?: Contract) => {
@@ -88,7 +93,7 @@ const Contracts: React.FC = () => {
         title: contract.title,
         childId: contract.childId,
         parentId: contract.parentId,
-        rules: contract.rules,
+        ruleIds: contract.rules.map(rule => rule.id),
         dailyReward: contract.dailyReward,
         startDate: contract.startDate,
         endDate: contract.endDate,
@@ -100,7 +105,7 @@ const Contracts: React.FC = () => {
         title: '',
         childId: '',
         parentId: authState.currentUser?.id || '',
-        rules: [],
+        ruleIds: [],
         dailyReward: 1,
         startDate: new Date().toISOString().split('T')[0],
         endDate: '',
@@ -115,18 +120,6 @@ const Contracts: React.FC = () => {
     setSelectedContract(null);
   };
 
-  const handleOpenRulesDialog = () => {
-    setOpenRulesDialog(true);
-  };
-
-  const handleCloseRulesDialog = () => {
-    setOpenRulesDialog(false);
-    setNewRule({
-      description: '',
-      isTask: false
-    });
-  };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData({
@@ -135,7 +128,7 @@ const Contracts: React.FC = () => {
     });
   };
 
-  const handleSelectChange = (e: any) => {
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
@@ -143,45 +136,12 @@ const Contracts: React.FC = () => {
     });
   };
 
-  const handleRuleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setNewRule({
-      ...newRule,
-      [name]: value
+  const handleRuleSelectChange = (e: SelectChangeEvent<string[]>) => {
+    const value = e.target.value;
+    setFormData({
+      ...formData,
+      ruleIds: typeof value === 'string' ? value.split(',') : value
     });
-  };
-
-  const handleRuleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setNewRule({
-      ...newRule,
-      isTask: e.target.checked
-    });
-  };
-
-  const handleAddRule = () => {
-    if (newRule.description && formData.rules) {
-      const rule: Rule = {
-        id: `rule${Date.now()}`,
-        description: newRule.description || '',
-        isTask: newRule.isTask || false
-      };
-      
-      setFormData({
-        ...formData,
-        rules: [...formData.rules, rule]
-      });
-      
-      handleCloseRulesDialog();
-    }
-  };
-
-  const handleRemoveRule = (ruleId: string) => {
-    if (formData.rules) {
-      setFormData({
-        ...formData,
-        rules: formData.rules.filter(rule => rule.id !== ruleId)
-      });
-    }
   };
 
   const handleSubmit = async () => {
@@ -191,20 +151,20 @@ const Contracts: React.FC = () => {
         return;
       }
 
-      if (!formData.rules || formData.rules.length === 0) {
-        alert('Veuillez ajouter au moins une règle au contrat');
+      if (!formData.ruleIds || formData.ruleIds.length === 0) {
+        alert('Veuillez sélectionner au moins une règle pour le contrat');
         return;
       }
 
       if (selectedContract) {
         // Mise à jour d'un contrat existant
         await contractService.updateContract(selectedContract.id, formData);
-        setContracts(contracts.map(c => 
-          c.id === selectedContract.id ? { ...c, ...formData } as Contract : c
-        ));
+        // Refresh contracts to get updated data with rules
+        const updatedContracts = await contractService.getContracts();
+        setContracts(updatedContracts);
       } else {
         // Création d'un nouveau contrat
-        const newContract = await contractService.createContract(formData as Omit<Contract, 'id'>);
+        const newContract = await contractService.createContract(formData);
         setContracts([...contracts, newContract]);
       }
       
@@ -224,6 +184,23 @@ const Contracts: React.FC = () => {
     } catch (error) {
       console.error('Error deactivating contract:', error);
       alert('Une erreur est survenue lors de la désactivation du contrat');
+    }
+  };
+
+  const handleDeleteContract = async (contractId: string) => {
+    const contract = contracts.find(c => c.id === contractId);
+    if (!contract) return;
+
+    const confirmMessage = `Êtes-vous sûr de vouloir supprimer définitivement le contrat "${contract.title}" ?\n\nCette action est irréversible. Le contrat sera supprimé, mais les transactions de portefeuille associées seront conservées.`;
+    
+    if (window.confirm(confirmMessage)) {
+      try {
+        await contractService.deleteContract(contractId);
+        setContracts(contracts.filter(c => c.id !== contractId));
+      } catch (error) {
+        console.error('Error deleting contract:', error);
+        alert('Une erreur est survenue lors de la suppression du contrat');
+      }
     }
   };
 
@@ -339,23 +316,43 @@ const Contracts: React.FC = () => {
                   </List>
                 </CardContent>
                 
-                {authState.currentUser?.isParent && contract.active && (
+                {authState.currentUser?.isParent && (
                   <CardActions>
-                    <Button 
-                      size="small" 
-                      startIcon={<Edit />}
-                      onClick={() => handleOpenDialog(contract)}
-                    >
-                      Modifier
-                    </Button>
-                    <Button 
-                      size="small" 
-                      color="error" 
-                      startIcon={<Delete />}
-                      onClick={() => handleDeactivateContract(contract.id)}
-                    >
-                      Désactiver
-                    </Button>
+                    {contract.active ? (
+                      <>
+                        <Button 
+                          size="small" 
+                          startIcon={<Edit />}
+                          onClick={() => handleOpenDialog(contract)}
+                        >
+                          Modifier
+                        </Button>
+                        <Button 
+                          size="small" 
+                          color="warning" 
+                          onClick={() => handleDeactivateContract(contract.id)}
+                        >
+                          Désactiver
+                        </Button>
+                        <Button 
+                          size="small" 
+                          color="error" 
+                          startIcon={<Delete />}
+                          onClick={() => handleDeleteContract(contract.id)}
+                        >
+                          Supprimer
+                        </Button>
+                      </>
+                    ) : (
+                      <Button 
+                        size="small" 
+                        color="error" 
+                        startIcon={<Delete />}
+                        onClick={() => handleDeleteContract(contract.id)}
+                      >
+                        Supprimer
+                      </Button>
+                    )}
                   </CardActions>
                 )}
               </Card>
@@ -468,42 +465,46 @@ const Contracts: React.FC = () => {
               </Grid>
             </Grid>
             
-            <Box sx={{ mt: 3, mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography variant="subtitle1">Règles du contrat</Typography>
-              <Button 
-                variant="outlined" 
-                startIcon={<Add />}
-                onClick={handleOpenRulesDialog}
-              >
-                Ajouter une règle
-              </Button>
-            </Box>
-            
-            {formData.rules && formData.rules.length > 0 ? (
-              <Paper variant="outlined" sx={{ p: 2 }}>
-                <List dense>
-                  {formData.rules.map((rule, index) => (
-                    <React.Fragment key={rule.id}>
-                      <ListItem
-                        secondaryAction={
-                          <IconButton edge="end" aria-label="delete" onClick={() => handleRemoveRule(rule.id)}>
-                            <Delete />
-                          </IconButton>
-                        }
-                      >
-                        <ListItemText
-                          primary={rule.description}
-                          secondary={rule.isTask ? 'Tâche à accomplir' : 'Règle à respecter'}
+            <FormControl fullWidth margin="normal" required>
+              <InputLabel id="rules-label">Règles du contrat</InputLabel>
+              <Select
+                labelId="rules-label"
+                id="ruleIds"
+                multiple
+                value={formData.ruleIds}
+                onChange={handleRuleSelectChange}
+                input={<OutlinedInput label="Règles du contrat" />}
+                renderValue={(selected) => (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selected.map((value) => {
+                      const rule = availableRules.find(r => r.id === value);
+                      return (
+                        <Chip 
+                          key={value} 
+                          label={rule?.description || value}
+                          size="small"
+                          color={rule?.isTask ? 'primary' : 'secondary'}
                         />
-                      </ListItem>
-                      {formData.rules && index < formData.rules.length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
-              </Paper>
-            ) : (
+                      );
+                    })}
+                  </Box>
+                )}
+              >
+                {availableRules.map((rule) => (
+                  <MenuItem key={rule.id} value={rule.id}>
+                    <Checkbox checked={formData.ruleIds.indexOf(rule.id) > -1} />
+                    <ListItemText 
+                      primary={rule.description}
+                      secondary={rule.isTask ? 'Tâche à accomplir' : 'Règle à respecter'}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {availableRules.length === 0 && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                Aucune règle ajoutée. Cliquez sur "Ajouter une règle" pour commencer.
+                Aucune règle disponible. Créez d'abord des règles dans la section "Gestion des Règles".
               </Typography>
             )}
           </Box>
@@ -513,40 +514,6 @@ const Contracts: React.FC = () => {
           <Button onClick={handleSubmit} variant="contained">
             {selectedContract ? 'Mettre à jour' : 'Créer'}
           </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialogue d'ajout de règle */}
-      <Dialog open={openRulesDialog} onClose={handleCloseRulesDialog}>
-        <DialogTitle>Ajouter une règle</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="normal"
-            id="description"
-            name="description"
-            label="Description de la règle"
-            type="text"
-            fullWidth
-            value={newRule.description}
-            onChange={handleRuleInputChange}
-          />
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={newRule.isTask || false}
-                  onChange={handleRuleCheckboxChange}
-                  name="isTask"
-                />
-              }
-              label="Cette règle est une tâche à accomplir"
-            />
-          </FormGroup>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseRulesDialog}>Annuler</Button>
-          <Button onClick={handleAddRule} variant="contained">Ajouter</Button>
         </DialogActions>
       </Dialog>
     </Layout>

@@ -42,37 +42,44 @@ export const mockRules: Rule[] = [
   {
     id: 'rule1',
     description: 'Pas péter près des autres',
-    isTask: false
+    isTask: false,
+    active: true
   },
   {
     id: 'rule2',
     description: 'Pas de doigt dans le nez ni la bouche',
-    isTask: false
+    isTask: false,
+    active: true
   },
   {
     id: 'rule3',
     description: 'Pas de crise',
-    isTask: false
+    isTask: false,
+    active: true
   },
   {
     id: 'rule4',
     description: 'Pas roter',
-    isTask: false
+    isTask: false,
+    active: true
   },
   {
     id: 'rule5',
     description: 'Pas sortir de son lit le soir',
-    isTask: false
+    isTask: false,
+    active: true
   },
   {
     id: 'rule6',
     description: 'Faire toutes les tâches du tableau',
-    isTask: true
+    isTask: true,
+    active: true
   },
   {
     id: 'rule7',
     description: 'Pas de violence',
-    isTask: false
+    isTask: false,
+    active: true
   }
 ];
 

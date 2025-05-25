@@ -1,15 +1,12 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, ForeignKey
+from sqlalchemy import Column, ForeignKey, Table
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
 from app.models.base import Base
-from app.models.contract import Contract
 
-class ContractRule(Base):
-    __tablename__ = "contract_rules"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=False)
-    description = Column(String, nullable=False)
-    is_task = Column(Boolean, default=False, nullable=False)
-
-    contract = relationship("Contract", back_populates="rules")
+# Association table for many-to-many relationship between contracts and rules
+contract_rules = Table(
+    'contract_rules',
+    Base.metadata,
+    Column('contract_id', UUID(as_uuid=True), ForeignKey('contracts.id'), primary_key=True),
+    Column('rule_id', UUID(as_uuid=True), ForeignKey('rules.id'), primary_key=True)
+)

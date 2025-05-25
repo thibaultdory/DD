@@ -40,7 +40,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["gunicorn", "app.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:${BACKEND_PORT}"]
+    command: ["gunicorn", "app.main:app", "-c", "gunicorn.conf.py"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT}/api/health"]
       interval: 30s
