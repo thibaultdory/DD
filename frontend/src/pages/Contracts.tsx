@@ -227,6 +227,23 @@ const Contracts: React.FC = () => {
     }
   };
 
+  const handleDeleteContract = async (contractId: string) => {
+    const contract = contracts.find(c => c.id === contractId);
+    if (!contract) return;
+
+    const confirmMessage = `Êtes-vous sûr de vouloir supprimer définitivement le contrat "${contract.title}" ?\n\nCette action est irréversible. Le contrat et toutes ses règles seront supprimés, mais les transactions de portefeuille associées seront conservées.`;
+    
+    if (window.confirm(confirmMessage)) {
+      try {
+        await contractService.deleteContract(contractId);
+        setContracts(contracts.filter(c => c.id !== contractId));
+      } catch (error) {
+        console.error('Error deleting contract:', error);
+        alert('Une erreur est survenue lors de la suppression du contrat');
+      }
+    }
+  };
+
   const getChildName = (childId: string) => {
     const child = authState.family.find(user => user.id === childId);
     return child ? child.name : 'Inconnu';
@@ -339,23 +356,43 @@ const Contracts: React.FC = () => {
                   </List>
                 </CardContent>
                 
-                {authState.currentUser?.isParent && contract.active && (
+                {authState.currentUser?.isParent && (
                   <CardActions>
-                    <Button 
-                      size="small" 
-                      startIcon={<Edit />}
-                      onClick={() => handleOpenDialog(contract)}
-                    >
-                      Modifier
-                    </Button>
-                    <Button 
-                      size="small" 
-                      color="error" 
-                      startIcon={<Delete />}
-                      onClick={() => handleDeactivateContract(contract.id)}
-                    >
-                      Désactiver
-                    </Button>
+                    {contract.active ? (
+                      <>
+                        <Button 
+                          size="small" 
+                          startIcon={<Edit />}
+                          onClick={() => handleOpenDialog(contract)}
+                        >
+                          Modifier
+                        </Button>
+                        <Button 
+                          size="small" 
+                          color="warning" 
+                          onClick={() => handleDeactivateContract(contract.id)}
+                        >
+                          Désactiver
+                        </Button>
+                        <Button 
+                          size="small" 
+                          color="error" 
+                          startIcon={<Delete />}
+                          onClick={() => handleDeleteContract(contract.id)}
+                        >
+                          Supprimer
+                        </Button>
+                      </>
+                    ) : (
+                      <Button 
+                        size="small" 
+                        color="error" 
+                        startIcon={<Delete />}
+                        onClick={() => handleDeleteContract(contract.id)}
+                      >
+                        Supprimer
+                      </Button>
+                    )}
                   </CardActions>
                 )}
               </Card>

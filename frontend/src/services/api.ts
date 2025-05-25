@@ -659,6 +659,22 @@ export const contractService = {
     
     const response = await api.put(`/contracts/${contractId}/deactivate`);
     return response.data;
+  },
+
+  // Supprimer un contrat (parents uniquement)
+  async deleteContract(contractId: string): Promise<void> {
+    if (USE_MOCK_DATA) {
+      const index = mockContracts.findIndex(c => c.id === contractId);
+      if (index !== -1) {
+        mockContracts.splice(index, 1);
+        notifyChange('contracts');
+        return;
+      }
+      throw new Error('Contract not found');
+    }
+    
+    await api.delete(`/contracts/${contractId}`);
+    notifyChange('contracts');
   }
 };
 
