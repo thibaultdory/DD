@@ -364,10 +364,33 @@ async def delete_task(
 
     try:
         logger.info(f"Deleting task {task_id} (delete_future={delete_future})")
+        
         # Si c'est une instance d'une tâche récurrente
         if task.parent_task_id:
-            logger.debug(f"Deleting recurring task instance {task_id}")
-            await db.delete(task)
+            if delete_future:
+                # L'utilisateur veut supprimer toute la série
+                logger.info(f"Deleting entire series for recurring task instance {task_id}")
+                parent_task_id = task.parent_task_id
+                
+                # Supprimer toutes les instances de la tâche récurrente (y compris celle-ci)
+                result = await db.execute(
+                    select(Task).where(Task.parent_task_id == parent_task_id)
+                )
+                all_instances = result.scalars().all()
+                logger.debug(f"Found {len(all_instances)} instances to delete.")
+                for instance in all_instances:
+                    logger.debug(f"Deleting instance {instance.id}")
+                    await db.delete(instance)
+                
+                # Supprimer aussi la tâche parente
+                parent_task = await db.get(Task, parent_task_id)
+                if parent_task:
+                    logger.debug(f"Deleting parent task {parent_task_id}")
+                    await db.delete(parent_task)
+            else:
+                # Supprimer uniquement cette instance
+                logger.debug(f"Deleting single recurring task instance {task_id}")
+                await db.delete(task)
         # Si c'est une tâche récurrente parente
         elif task.is_recurring:
             if delete_future:

@@ -16,7 +16,11 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions
+  DialogActions,
+  FormControl,
+  FormControlLabel,
+  RadioGroup,
+  Radio
 } from '@mui/material';
 import { 
   CheckCircle,
@@ -101,6 +105,7 @@ const Home: React.FC = () => {
   const [loadingFuture, setLoadingFuture] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [deleteChoice, setDeleteChoice] = useState<'single' | 'series'>('single');
   const [initialTimelineLoaded, setInitialTimelineLoaded] = useState(false);
   
   // Date range for loaded data
@@ -685,6 +690,7 @@ const Home: React.FC = () => {
 
   const handleDeleteTask = (task: Task) => {
     setTaskToDelete(task);
+    setDeleteChoice('single'); // Default to single instance
     setDeleteDialogOpen(true);
   };
 
@@ -692,7 +698,14 @@ const Home: React.FC = () => {
     if (!taskToDelete) return;
 
     try {
-      const deleteFuture = taskToDelete.isRecurring && !taskToDelete.parentTaskId;
+      // Determine if we should delete future instances based on user choice
+      let deleteFuture = false;
+      
+      if (taskToDelete.isRecurring || taskToDelete.parentTaskId) {
+        // For any recurring task (parent or instance), respect user's choice
+        deleteFuture = deleteChoice === 'series';
+      }
+      
       await taskService.deleteTask(taskToDelete.id, deleteFuture);
       setDeleteDialogOpen(false);
       setTaskToDelete(null);
@@ -1169,14 +1182,44 @@ const Home: React.FC = () => {
             {taskToDelete && (
               <>
                 Êtes-vous sûr de vouloir supprimer la tâche "{taskToDelete.title}" ?
-                {taskToDelete.isRecurring && !taskToDelete.parentTaskId && (
-                  <><br /><br />
-                  <strong>Note :</strong> Cette tâche est récurrente. Sa suppression supprimera également toutes les instances futures de cette tâche.
+                
+                {(taskToDelete.isRecurring || taskToDelete.parentTaskId) && (
+                  <>
+                    <br /><br />
+                    <strong>Options de suppression :</strong>
+                    <Box sx={{ mt: 2 }}>
+                      <FormControl component="fieldset">
+                        <RadioGroup
+                          value={deleteChoice}
+                          onChange={(e) => setDeleteChoice(e.target.value as 'single' | 'series')}
+                        >
+                          <FormControlLabel
+                            value="single"
+                            control={<Radio />}
+                            label={
+                              taskToDelete.parentTaskId 
+                                ? "Supprimer uniquement cette occurrence" 
+                                : "Supprimer uniquement cette occurrence (garder les futures)"
+                            }
+                          />
+                          <FormControlLabel
+                            value="series"
+                            control={<Radio />}
+                            label={
+                              taskToDelete.parentTaskId
+                                ? "Supprimer toute la série de tâches récurrentes"
+                                : "Supprimer cette tâche et toutes les occurrences futures"
+                            }
+                          />
+                        </RadioGroup>
+                      </FormControl>
+                    </Box>
                   </>
                 )}
-                {taskToDelete.parentTaskId && (
+                
+                {!taskToDelete.isRecurring && !taskToDelete.parentTaskId && (
                   <><br /><br />
-                  <strong>Note :</strong> Ceci est une instance d'une tâche récurrente. Seule cette occurrence sera supprimée.
+                  <strong>Note :</strong> Cette tâche sera définitivement supprimée.
                   </>
                 )}
               </>
