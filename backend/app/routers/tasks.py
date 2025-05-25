@@ -193,9 +193,14 @@ async def update_task(task_id: UUID, updates: TaskUpdate, current_user: User = D
 
         # Check permissions based on user type and update content
         if current_user.is_parent:
-            # Parents can update tasks they created
-            if task.created_by != current_user.id:
-                logger.warning(f"Unauthorized update attempt on task {task_id} by parent {current_user.id}")
+            # Parents can always change completion status of any task
+            # For other modifications, they can only update tasks they created
+            if "completed" in data and len(data) == 1:
+                # Only updating completion status - allow for any parent
+                logger.debug(f"Parent {current_user.id} updating completion status for task {task_id}")
+            elif task.created_by != current_user.id:
+                # Trying to update other fields on a task they didn't create
+                logger.warning(f"Unauthorized update attempt on task {task_id} by parent {current_user.id} - can only modify tasks they created")
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task")
         else:
             # Children can only uncomplete tasks they're assigned to
