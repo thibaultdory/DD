@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 import logging # Import logging
@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.dependencies import require_parent
 from app.models.contract import Contract
 from app.models.contract_rule import ContractRule
+from app.models.wallet import WalletTransaction
 from app.schemas import ContractCreate, ContractUpdate, ContractRuleCreate
 
 logger = logging.getLogger(__name__) # Add logger instance
@@ -147,3 +148,34 @@ async def deactivate_contract(contract_id: UUID, parent=Depends(require_parent),
         logger.error(f"Failed to deactivate contract {contract_id}: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deactivate contract")
+
+@router.delete("/contracts/{contract_id}")
+async def delete_contract(contract_id: UUID, parent=Depends(require_parent), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
+    if not contract:
+        logger.warning(f"Delete attempt on non-existent contract: {contract_id}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+    
+    try:
+        logger.info(f"Deleting contract {contract_id} ('{contract.title}')")
+        
+        # First, update wallet transactions to remove the contract reference
+        # This prevents foreign key constraint violations
+        await db.execute(
+            update(WalletTransaction)
+            .where(WalletTransaction.contract_id == contract_id)
+            .values(contract_id=None)
+        )
+        logger.debug(f"Updated wallet transactions to remove contract reference for contract {contract_id}")
+        
+        # Delete the contract (rules will be automatically deleted due to cascade)
+        await db.delete(contract)
+        await db.commit()
+        
+        logger.info(f"Successfully deleted contract {contract_id}")
+        return {"message": "Contract deleted successfully", "contractId": str(contract_id)}
+    except Exception as e:
+        logger.error(f"Failed to delete contract {contract_id}: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete contract")
