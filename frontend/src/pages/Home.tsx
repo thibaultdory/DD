@@ -1053,7 +1053,10 @@ const Home: React.FC = () => {
                                             fontWeight: 600
                                           }}
                                         >
-                                          {getFirstName(getUserName(task.assignedTo[0]))}
+                                          {task.assignedTo.length > 1 
+                                            ? `${getFirstName(getUserName(task.assignedTo[0]))} +${task.assignedTo.length - 1}`
+                                            : getFirstName(getUserName(task.assignedTo[0]))
+                                          }
                                         </Typography>
                                       </Box>
                                     )}
