@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from uuid import UUID
 import logging # Import logging
 from app.core.database import get_db
@@ -30,20 +31,21 @@ def serialize_contract(contract: Contract):
 
 @router.get("/contracts")
 async def get_contracts(parent=Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Contract))
+    result = await db.execute(select(Contract).options(selectinload(Contract.rules)))
     contracts = result.scalars().all()
     return [serialize_contract(c) for c in contracts]
 
 @router.get("/contracts/{contract_id}")
 async def get_contract(contract_id: UUID, parent=Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    contract = await db.get(Contract, contract_id)
+    result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
     return serialize_contract(contract)
 
 @router.get("/contracts/child/{child_id}")
 async def get_child_contracts(child_id: UUID, parent=Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Contract).where(Contract.child_id == child_id))
+    result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.child_id == child_id))
     contracts = result.scalars().all()
     return [serialize_contract(c) for c in contracts]
 
@@ -70,7 +72,11 @@ async def create_contract(data: ContractCreate, parent=Depends(require_parent), 
             logger.debug(f"Adding rule '{r.description}' to contract {contract.id}")
         
         await db.commit()
-        await db.refresh(contract)
+        
+        # Reload the contract with rules using eager loading
+        result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract.id))
+        contract = result.scalar_one()
+        
         logger.info(f"Successfully created contract {contract.id}")
         return serialize_contract(contract)
     except Exception as e:
@@ -80,7 +86,8 @@ async def create_contract(data: ContractCreate, parent=Depends(require_parent), 
 
 @router.put("/contracts/{contract_id}")
 async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    contract = await db.get(Contract, contract_id)
+    result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
     if not contract:
         logger.warning(f"Update attempt on non-existent contract: {contract_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
@@ -107,7 +114,11 @@ async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depend
                 logger.warning(f"Attempted to update non-existent field '{model_field}' (from '{field}') on contract {contract_id}")
 
         await db.commit()
-        await db.refresh(contract)
+        
+        # Reload the contract with rules using eager loading
+        result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract.id))
+        contract = result.scalar_one()
+        
         logger.info(f"Successfully updated contract {contract_id}")
         return serialize_contract(contract)
     except Exception as e:
@@ -117,14 +128,19 @@ async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depend
 
 @router.put("/contracts/{contract_id}/deactivate")
 async def deactivate_contract(contract_id: UUID, parent=Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    contract = await db.get(Contract, contract_id)
+    result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract_id))
+    contract = result.scalar_one_or_none()
     if not contract:
         logger.warning(f"Deactivation attempt on non-existent contract: {contract_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
     try:
         contract.active = False
         await db.commit()
-        await db.refresh(contract)
+        
+        # Reload the contract with rules using eager loading
+        result = await db.execute(select(Contract).options(selectinload(Contract.rules)).where(Contract.id == contract.id))
+        contract = result.scalar_one()
+        
         logger.info(f"Successfully deactivated contract {contract_id}")
         return serialize_contract(contract)
     except Exception as e:
