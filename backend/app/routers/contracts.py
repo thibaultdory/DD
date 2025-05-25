@@ -10,6 +10,7 @@ from app.models.contract import Contract
 from app.models.rule import Rule
 from app.models.wallet import WalletTransaction
 from app.schemas import ContractCreate, ContractUpdate
+from app.models.contract_rule import contract_rules
 
 logger = logging.getLogger(__name__) # Add logger instance
 router = APIRouter()
@@ -72,8 +73,14 @@ async def create_contract(data: ContractCreate, parent=Depends(require_parent), 
         db.add(contract)
         await db.flush()  # Flush to get the contract ID
         
-        # Associate rules with the contract
-        contract.rules = rules
+        # Insert associations directly into the association table
+        for rule_id in data.ruleIds:
+            await db.execute(
+                contract_rules.insert().values(
+                    contract_id=contract.id,
+                    rule_id=rule_id
+                )
+            )
         
         await db.commit()
         
@@ -112,7 +119,19 @@ async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depend
             if len(rules) != len(rule_ids):
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="One or more rule IDs are invalid or inactive")
             
-            contract.rules = rules
+            # Delete existing associations
+            await db.execute(
+                contract_rules.delete().where(contract_rules.c.contract_id == contract_id)
+            )
+            
+            # Insert new associations
+            for rule_id in rule_ids:
+                await db.execute(
+                    contract_rules.insert().values(
+                        contract_id=contract_id,
+                        rule_id=rule_id
+                    )
+                )
         
         for field, value in updates.items():
             # Adjust field names from schema (camelCase) to model (snake_case)
