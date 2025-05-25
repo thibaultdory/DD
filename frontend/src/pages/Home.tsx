@@ -679,6 +679,12 @@ const Home: React.FC = () => {
       } else {
         await taskService.completeTask(task.id);
       }
+      
+      // Refresh the timeline data to reflect the changes
+      const startDateStr = format(dateRange.start, 'yyyy-MM-dd');
+      const endDateStr = format(dateRange.end, 'yyyy-MM-dd');
+      await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      
     } catch (error) {
       console.error('Error toggling task completion:', error);
     }
@@ -709,6 +715,12 @@ const Home: React.FC = () => {
       await taskService.deleteTask(taskToDelete.id, deleteFuture);
       setDeleteDialogOpen(false);
       setTaskToDelete(null);
+      
+      // Refresh the timeline data to reflect the changes
+      const startDateStr = format(dateRange.start, 'yyyy-MM-dd');
+      const endDateStr = format(dateRange.end, 'yyyy-MM-dd');
+      await refreshFamilyDataForDateRange(startDateStr, endDateStr);
+      
     } catch (error) {
       console.error('Error deleting task:', error);
     }
