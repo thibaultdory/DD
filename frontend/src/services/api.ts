@@ -836,5 +836,58 @@ export const walletService = {
     
     const response = await api.post(`/wallets/${childId}/convert`, { amount });
     return response.data;
+  },
+
+  // Retraiter les récompenses journalières pour une plage de dates (parents uniquement)
+  async reprocessRewards(startDate: string, endDate: string): Promise<{
+    success: boolean;
+    message: string;
+    summary: {
+      total_rewards_processed: number;
+      total_rewards_skipped: number;
+      total_amount_credited: number;
+      days_processed: number;
+    };
+    daily_results: Array<{
+      date: string;
+      rewards_processed: number;
+      rewards_skipped: number;
+      total_amount_credited: number;
+    }>;
+  }> {
+    if (USE_MOCK_DATA) {
+      // Mock implementation for development
+      return {
+        success: true,
+        message: `Reprocessed rewards from ${startDate} to ${endDate}`,
+        summary: {
+          total_rewards_processed: 2,
+          total_rewards_skipped: 1,
+          total_amount_credited: 3.0,
+          days_processed: 2
+        },
+        daily_results: [
+          {
+            date: startDate,
+            rewards_processed: 1,
+            rewards_skipped: 0,
+            total_amount_credited: 1.5
+          },
+          {
+            date: endDate,
+            rewards_processed: 1,
+            rewards_skipped: 1,
+            total_amount_credited: 1.5
+          }
+        ]
+      };
+    }
+    
+    const response = await api.post('/admin/reprocess-rewards', {
+      startDate,
+      endDate
+    });
+    notifyChange('wallets');
+    return response.data;
   }
 };
