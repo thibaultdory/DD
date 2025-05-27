@@ -1,9 +1,10 @@
 from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 import logging
 from app.models.task import Task
-from app.core.database import get_db
+from app.core.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +16,10 @@ async def create_recurring_task_instances():
     today = date.today()
     logger.info(f"🔄 SCHEDULER: Starting recurring task instance creation for {today}")
     
-    async for db in get_db():
+    async with AsyncSessionLocal() as db:
         try:
-            # Sélectionne toutes les tâches récurrentes
-            stmt = select(Task).where(Task.is_recurring == True)
+            # Sélectionne toutes les tâches récurrentes avec eager loading des relations
+            stmt = select(Task).options(selectinload(Task.assigned_to)).where(Task.is_recurring == True)
             result = await db.execute(stmt)
             recurring_tasks = result.scalars().all()
             
@@ -70,9 +71,15 @@ async def create_recurring_task_instances():
                             parent_task_id=task.id,
                             is_recurring=False  # L'instance n'est pas elle-même récurrente
                         )
-                        # Copie les assignations
-                        new_instance.assigned_to = task.assigned_to
+                        
+                        # Add the new instance to the session first
                         db.add(new_instance)
+                        await db.flush()  # Flush to get the ID
+                        
+                        # Now copy the assignments using the association table
+                        for assigned_user in task.assigned_to:
+                            # Add the assignment relationship
+                            new_instance.assigned_to.append(assigned_user)
                         
                         logger.info(f"   ✅ Created task instance for {task_date} (weekday {weekday})")
                         instances_created_for_task += 1
