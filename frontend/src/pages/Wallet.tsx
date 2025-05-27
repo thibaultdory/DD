@@ -18,7 +18,6 @@ import {
   DialogActions,
   TextField,
   Avatar,
-  Tooltip,
   Alert,
   Accordion,
   AccordionSummary,
