@@ -23,15 +23,18 @@ import { ruleService } from '../services/api';
 import Layout from '../components/Layout/Layout';
 
 const Rules: React.FC = () => {
-  const { authState } = useAuth();
+  const { getEffectiveCurrentUser } = useAuth();
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [selectedRule, setSelectedRule] = useState<Rule | null>(null);
-  const [formData, setFormData] = useState<Partial<Rule>>({
-    description: '',
-    isTask: false
-  });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<Rule | null>(null);
+
+  // Form state
+  const [description, setDescription] = useState('');
+  const [isTask, setIsTask] = useState(false);
+
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
 
   useEffect(() => {
     const fetchRules = async () => {
@@ -50,57 +53,55 @@ const Rules: React.FC = () => {
 
   const handleOpenDialog = (rule?: Rule) => {
     if (rule) {
-      setSelectedRule(rule);
-      setFormData({
-        description: rule.description,
-        isTask: rule.isTask
-      });
+      setEditingRule(rule);
+      setDescription(rule.description);
+      setIsTask(rule.isTask);
     } else {
-      setSelectedRule(null);
-      setFormData({
-        description: '',
-        isTask: false
-      });
+      setEditingRule(null);
+      setDescription('');
+      setIsTask(false);
     }
-    setOpenDialog(true);
+    setDialogOpen(true);
   };
 
   const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setSelectedRule(null);
+    setDialogOpen(false);
+    setEditingRule(null);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
+    if (name === 'description') {
+      setDescription(value);
+    }
   };
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      isTask: e.target.checked
-    });
+    setIsTask(e.target.checked);
   };
 
   const handleSubmit = async () => {
     try {
-      if (!formData.description) {
+      if (!description) {
         alert('Veuillez saisir une description pour la règle');
         return;
       }
 
-      if (selectedRule) {
+      if (editingRule) {
         // Mise à jour d'une règle existante
-        const updatedRule = await ruleService.updateRule(selectedRule.id, formData);
+        const updatedRule = await ruleService.updateRule(editingRule.id, {
+          description,
+          isTask
+        });
         setRules(rules.map(r => 
-          r.id === selectedRule.id ? updatedRule : r
+          r.id === editingRule.id ? updatedRule : r
         ));
       } else {
         // Création d'une nouvelle règle
-        const newRule = await ruleService.createRule(formData as Omit<Rule, 'id' | 'active'>);
+        const newRule = await ruleService.createRule({
+          description,
+          isTask
+        });
         setRules([...rules, newRule]);
       }
       
@@ -133,7 +134,7 @@ const Rules: React.FC = () => {
   }
 
   // Only parents can access this page
-  if (!authState.currentUser?.isParent) {
+  if (!effectiveUser?.isParent) {
     return (
       <Layout>
         <Typography variant="h4" color="error">
@@ -222,9 +223,9 @@ const Rules: React.FC = () => {
       )}
 
       {/* Dialogue de création/modification de règle */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {selectedRule ? 'Modifier la règle' : 'Nouvelle règle'}
+          {editingRule ? 'Modifier la règle' : 'Nouvelle règle'}
         </DialogTitle>
         <DialogContent>
           <Box component="form" sx={{ mt: 1 }}>
@@ -235,7 +236,7 @@ const Rules: React.FC = () => {
               id="description"
               label="Description de la règle"
               name="description"
-              value={formData.description}
+              value={description}
               onChange={handleInputChange}
               multiline
               rows={3}
@@ -244,7 +245,7 @@ const Rules: React.FC = () => {
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={formData.isTask || false}
+                  checked={isTask}
                   onChange={handleCheckboxChange}
                   name="isTask"
                 />
@@ -257,7 +258,7 @@ const Rules: React.FC = () => {
         <DialogActions>
           <Button onClick={handleCloseDialog}>Annuler</Button>
           <Button onClick={handleSubmit} variant="contained">
-            {selectedRule ? 'Mettre à jour' : 'Créer'}
+            {editingRule ? 'Mettre à jour' : 'Créer'}
           </Button>
         </DialogActions>
       </Dialog>

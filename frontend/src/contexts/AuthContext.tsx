@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthState, PinAuthState } from '../types';
+import { AuthState, PinAuthState, User } from '../types';
 import { authService, API_BASE_URL } from '../services/api';
 
 // Valeurs par défaut du contexte
@@ -18,13 +18,15 @@ const AuthContext = createContext<{
   authError: string | null;
   clearAuthError: () => void;
   updatePinAuth: (pinAuth: PinAuthState) => void;
+  getEffectiveCurrentUser: () => User | null;
 }>({
   authState: defaultAuthState,
   login: async () => {},
   logout: async () => {},
   authError: null,
   clearAuthError: () => {},
-  updatePinAuth: () => {}
+  updatePinAuth: () => {},
+  getEffectiveCurrentUser: () => null
 });
 
 // Hook personnalisé pour utiliser le contexte d'authentification
@@ -119,6 +121,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }));
   };
 
+  // Fonction pour obtenir l'utilisateur effectif (Google ou PIN)
+  const getEffectiveCurrentUser = (): User | null => {
+    // If PIN authentication is active and we have a current PIN profile
+    if (authState.pinAuth?.isPinAuthenticated && authState.pinAuth.currentPinProfile) {
+      const pinProfile = authState.pinAuth.currentPinProfile;
+      
+      // Find the corresponding user in the family or current user
+      const allUsers = authState.currentUser ? [authState.currentUser, ...authState.family] : authState.family;
+      const pinUser = allUsers.find(user => user.id === pinProfile.userId);
+      
+      if (pinUser) {
+        return pinUser;
+      }
+    }
+    
+    // Default to Google authenticated user
+    return authState.currentUser;
+  };
+
   // Valeur du contexte
   const value = {
     authState,
@@ -126,7 +147,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     authError,
     clearAuthError,
-    updatePinAuth
+    updatePinAuth,
+    getEffectiveCurrentUser
   };
 
   if (loading) {

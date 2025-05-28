@@ -34,6 +34,7 @@ interface PinContextType {
   getTabletDetectionResults: () => Record<string, boolean>;
   autoCreateProfilesFromFamily: (familyMembers: User[]) => void;
   forceExitTabletMode: () => void;
+  setPinAuthUpdateCallback: (callback: (pinAuth: PinAuthState) => void) => void;
 }
 
 // Create context
@@ -62,6 +63,7 @@ export const PinProvider: React.FC<PinProviderProps> = ({
   const [pinAuthState, setPinAuthState] = useState<PinAuthState>(defaultPinAuthState);
   const [tabletConfig, setTabletConfig] = useState<TabletConfig>(defaultTabletConfig);
   const [screenLockDetector] = useState(() => ScreenLockDetector.getInstance());
+  const [pinAuthUpdateCallback, setPinAuthUpdateCallback] = useState<((pinAuth: PinAuthState) => void) | null>(null);
 
   // Load saved configuration on mount
   useEffect(() => {
@@ -73,6 +75,13 @@ export const PinProvider: React.FC<PinProviderProps> = ({
       screenLockDetector.stopListening();
     };
   }, []);
+
+  // Sync PIN auth state with callback
+  useEffect(() => {
+    if (pinAuthUpdateCallback) {
+      pinAuthUpdateCallback(pinAuthState);
+    }
+  }, [pinAuthState, pinAuthUpdateCallback]);
 
   // Load configuration from localStorage
   const loadSavedConfig = (): void => {
@@ -113,11 +122,16 @@ export const PinProvider: React.FC<PinProviderProps> = ({
   const setupScreenLockDetection = (): void => {
     screenLockDetector.startListening({
       onScreenLock: () => {
-        if (tabletConfig.enabled && tabletConfig.autoLogoutOnScreenOff) {
+        console.log('Screen lock detected, tablet config:', tabletConfig);
+        if (tabletConfig.enabled && tabletConfig.autoLogoutOnScreenOff && pinAuthState.isPinAuthenticated) {
+          console.log('Auto-logout triggered due to screen lock');
           logoutPin();
         }
       },
-      debounceMs: 2000 // 2 second delay to avoid false positives
+      onScreenUnlock: () => {
+        console.log('Screen unlock detected');
+      },
+      debounceMs: 1000 // Reduced delay for faster response
     });
   };
 
@@ -191,11 +205,13 @@ export const PinProvider: React.FC<PinProviderProps> = ({
 
   // Logout from PIN authentication
   const logoutPin = (): void => {
+    console.log('PIN logout triggered, current state:', pinAuthState);
     setPinAuthState(prev => ({
       ...prev,
       isPinAuthenticated: false,
       currentPinProfile: null
     }));
+    console.log('PIN logout completed');
   };
 
   // Setup tablet mode with profiles
@@ -273,10 +289,15 @@ export const PinProvider: React.FC<PinProviderProps> = ({
   // Enable tablet mode
   const enableTabletMode = (): void => {
     TabletDetector.enableTabletMode();
-    const newConfig = { ...tabletConfig, enabled: true };
+    const newConfig = { 
+      ...tabletConfig, 
+      enabled: true,
+      autoLogoutOnScreenOff: true // Ensure auto-logout is enabled
+    };
     setTabletConfig(newConfig);
     setPinAuthState(prev => ({ ...prev, isTabletMode: true }));
     saveConfig(newConfig);
+    console.log('Tablet mode enabled with config:', newConfig);
   };
 
   // Disable tablet mode
@@ -334,7 +355,8 @@ export const PinProvider: React.FC<PinProviderProps> = ({
     isTabletModeAvailable,
     getTabletDetectionResults,
     autoCreateProfilesFromFamily,
-    forceExitTabletMode
+    forceExitTabletMode,
+    setPinAuthUpdateCallback
   };
 
   return (

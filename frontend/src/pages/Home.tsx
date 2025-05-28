@@ -78,7 +78,7 @@ interface TimelineItem {
 }
 
 const Home: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const navigate = useNavigate();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const hasAutoScrolled = useRef(false);
@@ -115,6 +115,9 @@ const Home: React.FC = () => {
   });
 
   const children = authState.family.filter(user => !user.isParent);
+
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
 
   // Utility functions for colors (consistent with calendar)
   const getChildColorScheme = (userId: string) => {
@@ -263,7 +266,7 @@ const Home: React.FC = () => {
     let filteredTasks: Task[] = [];
     let filteredViolations: RuleViolation[] = [];
     
-    if (authState.currentUser?.isParent && selectedChild) {
+    if (effectiveUser?.isParent && selectedChild) {
       // Parent viewing specific child
       filteredTasks = familyTasks.filter(task => 
         task.assignedTo.includes(selectedChild)
@@ -271,13 +274,13 @@ const Home: React.FC = () => {
       filteredViolations = familyViolations.filter(violation => 
         violation.childId === selectedChild && violation.canView !== false
       );
-    } else if (authState.currentUser?.isParent && !selectedChild) {
+    } else if (effectiveUser?.isParent && !selectedChild) {
       // Parent viewing all family data
       filteredTasks = familyTasks;
       filteredViolations = familyViolations.filter(violation => violation.canView !== false);
     } else {
       // Child viewing their own data
-      const userId = authState.currentUser?.id || '';
+      const userId = effectiveUser?.id || '';
       filteredTasks = getCalendarTasks(userId);
       filteredViolations = familyViolations.filter(violation => 
         violation.childId === userId && violation.canView !== false
@@ -290,11 +293,11 @@ const Home: React.FC = () => {
     });
     
     return { tasks: filteredTasks, violations: filteredViolations };
-  }, [familyTasks, familyViolations, selectedChild, authState.currentUser, getCalendarTasks]);
+  }, [familyTasks, familyViolations, selectedChild, effectiveUser, getCalendarTasks]);
 
   // Load initial data and setup timeline - ONLY ONCE
   useEffect(() => {
-    if (!authState.currentUser || initialLoading || initialTimelineLoaded) return;
+    if (!effectiveUser || initialLoading || initialTimelineLoaded) return;
     
     console.log('[Timeline] Loading initial data');
     
@@ -323,7 +326,7 @@ const Home: React.FC = () => {
     };
     
     loadInitialData();
-  }, [authState.currentUser, initialLoading, initialTimelineLoaded, refreshFamilyDataForDateRange]);
+  }, [effectiveUser, initialLoading, initialTimelineLoaded, refreshFamilyDataForDateRange]);
 
   // Create initial timeline ONLY when initial data is loaded for the first time
   useEffect(() => {
@@ -670,10 +673,10 @@ const Home: React.FC = () => {
 
   // Child selection for parents
   useEffect(() => {
-    if (authState.currentUser?.isParent && children.length > 0 && !selectedChild) {
+    if (effectiveUser?.isParent && children.length > 0 && !selectedChild) {
       setSelectedChild(children[0].id);
     }
-  }, [authState.currentUser, children, selectedChild]);
+  }, [effectiveUser, children, selectedChild]);
 
   const handleChildSelect = (childId: string) => {
     setSelectedChild(childId);
@@ -779,7 +782,7 @@ const Home: React.FC = () => {
     <Layout>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
-          Bonjour, {authState.currentUser?.name} !
+          Bonjour, {effectiveUser?.name} !
         </Typography>
         <Typography variant="subtitle1">
           Bienvenue dans votre assistant de vie familiale
@@ -787,7 +790,7 @@ const Home: React.FC = () => {
       </Box>
 
       {/* Sélecteur d'enfant pour les parents */}
-      {authState.currentUser?.isParent && children.length > 0 && (
+      {effectiveUser?.isParent && children.length > 0 && (
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
           <Typography variant="subtitle1" sx={{ mr: 2 }}>
             Afficher les données de :
@@ -828,7 +831,7 @@ const Home: React.FC = () => {
       )}
 
       {/* Color Legend for multiple children */}
-      {authState.currentUser?.isParent && children.length > 1 && (
+      {effectiveUser?.isParent && children.length > 1 && (
         <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid #e0e0e0' }}>
           <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
             Légende des couleurs par enfant :
@@ -861,7 +864,7 @@ const Home: React.FC = () => {
       )}
 
       {/* Actions Bar */}
-      {authState.currentUser?.isParent && (
+      {effectiveUser?.isParent && (
         <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <Button 
             variant="outlined" 
@@ -1001,7 +1004,7 @@ const Home: React.FC = () => {
                               secondaryAction={
                                 <Box sx={{ display: 'flex', gap: 0.5 }}>
                                   {/* Task action buttons */}
-                                  {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                                  {effectiveUser?.isParent && task.createdBy === effectiveUser.id && (
                                     <>
                                       <Tooltip title="Modifier la tâche">
                                         <IconButton
@@ -1073,7 +1076,7 @@ const Home: React.FC = () => {
                                       {task.title}
                                     </Typography>
                                     {/* Child indicator */}
-                                    {authState.currentUser?.isParent && !selectedChild && (
+                                    {effectiveUser?.isParent && !selectedChild && (
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                         <Box
                                           sx={{
@@ -1143,7 +1146,7 @@ const Home: React.FC = () => {
                                       {getRuleName(violation.ruleId)}
                                     </Typography>
                                     {/* Child indicator */}
-                                    {authState.currentUser?.isParent && !selectedChild && (
+                                    {effectiveUser?.isParent && !selectedChild && (
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                         <Box
                                           sx={{

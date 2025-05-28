@@ -32,7 +32,7 @@ import { usePin } from '../contexts/PinContext';
 import Layout from '../components/Layout/Layout';
 
 const Profile: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const {
     pinAuthState,
     tabletConfig,
@@ -49,7 +49,10 @@ const Profile: React.FC = () => {
   const [showDetectionInfo, setShowDetectionInfo] = useState(false);
   const [pendingPins, setPendingPins] = useState<Record<string, string>>({});
   
-  if (!authState.currentUser) {
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
+  
+  if (!effectiveUser) {
     return (
       <Layout>
         <Typography variant="h5" align="center" sx={{ mt: 4 }}>
@@ -59,8 +62,8 @@ const Profile: React.FC = () => {
     );
   }
 
-  const { currentUser, family } = authState;
-  const birthDate = parseISO(currentUser.birthDate);
+  const { family } = authState;
+  const birthDate = parseISO(effectiveUser.birthDate);
   const age = differenceInYears(new Date(), birthDate);
 
   const handleToggleTabletMode = (): void => {
@@ -68,7 +71,7 @@ const Profile: React.FC = () => {
       disableTabletMode();
     } else {
       // Create profiles with pending PINs or defaults
-      const profilesData = [...family, currentUser].map(member => {
+      const profilesData = [...family, effectiveUser].map(member => {
         const pendingPin = pendingPins[member.id];
         return {
           id: `profile_${member.id}_${Date.now()}`,
@@ -82,7 +85,7 @@ const Profile: React.FC = () => {
       });
       
       // Auto-create profiles with custom PINs
-      autoCreateProfilesFromFamily([...family, currentUser]);
+      autoCreateProfilesFromFamily([...family, effectiveUser]);
       
       // Update with custom PINs after creation
       setTimeout(() => {
@@ -159,15 +162,15 @@ const Profile: React.FC = () => {
           <Card>
             <CardContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 3 }}>
               <Avatar
-                src={currentUser.profilePicture}
-                alt={currentUser.name}
+                src={effectiveUser.profilePicture}
+                alt={effectiveUser.name}
                 sx={{ width: 120, height: 120, mb: 2 }}
               />
               <Typography variant="h5" gutterBottom>
-                {currentUser.name}
+                {effectiveUser.name}
               </Typography>
               <Typography variant="body1" color="text.secondary" gutterBottom>
-                {currentUser.isParent ? 'Parent' : 'Enfant'}
+                {effectiveUser.isParent ? 'Parent' : 'Enfant'}
               </Typography>
               <Typography variant="body2">
                 Date de naissance: {format(birthDate, 'd MMMM yyyy', { locale: fr })}
@@ -185,7 +188,7 @@ const Profile: React.FC = () => {
               <Typography variant="h6">
                 Membres de la famille
               </Typography>
-              {currentUser.isParent && (
+              {effectiveUser.isParent && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <Chip
                     icon={<Tablet />}
@@ -205,7 +208,7 @@ const Profile: React.FC = () => {
             </Box>
 
             {/* Tablet mode toggle for parents */}
-            {currentUser.isParent && (
+            {effectiveUser.isParent && (
               <Box sx={{ mb: 3 }}>
                 <FormControlLabel
                   control={
@@ -242,39 +245,39 @@ const Profile: React.FC = () => {
               {/* Current user */}
               <ListItem>
                 <Avatar
-                  src={currentUser.profilePicture}
-                  alt={currentUser.name}
+                  src={effectiveUser.profilePicture}
+                  alt={effectiveUser.name}
                   sx={{ mr: 2 }}
                 />
                 <ListItemText
                   primary={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {currentUser.name}
+                      {effectiveUser.name}
                       <Chip label="Vous" size="small" color="primary" variant="outlined" />
                     </Box>
                   }
                   secondary={
                     <Box>
                       <Typography variant="body2" color="textSecondary">
-                        {currentUser.isParent ? 'Parent' : 'Enfant'} - {age} ans
+                        {effectiveUser.isParent ? 'Parent' : 'Enfant'} - {age} ans
                       </Typography>
-                      {(tabletConfig.enabled || currentUser.isParent) && (
+                      {(tabletConfig.enabled || effectiveUser.isParent) && (
                         <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                           {tabletConfig.enabled ? (
                             <Chip 
-                              label={`PIN: ${getPinForMember(currentUser.id) || 'Non configuré'}`}
+                              label={`PIN: ${getPinForMember(effectiveUser.id) || 'Non configuré'}`}
                               size="small"
                               variant="outlined"
-                              color={getPinForMember(currentUser.id) === '0000' || getPinForMember(currentUser.id) === '1234' ? 'warning' : 'success'}
+                              color={getPinForMember(effectiveUser.id) === '0000' || getPinForMember(effectiveUser.id) === '1234' ? 'warning' : 'success'}
                             />
                           ) : (
                             <TextField
                               size="small"
                               label="Code PIN"
                               type="password"
-                              value={pendingPins[currentUser.id] || ''}
-                              onChange={(e) => handlePendingPinChange(currentUser.id, e.target.value)}
-                              placeholder={currentUser.isParent ? '0000' : '1234'}
+                              value={pendingPins[effectiveUser.id] || ''}
+                              onChange={(e) => handlePendingPinChange(effectiveUser.id, e.target.value)}
+                              placeholder={effectiveUser.isParent ? '0000' : '1234'}
                               inputProps={{ maxLength: 6 }}
                               sx={{ width: 120 }}
                             />
@@ -284,11 +287,11 @@ const Profile: React.FC = () => {
                     </Box>
                   }
                 />
-                {tabletConfig.enabled && currentUser.isParent && (
+                {tabletConfig.enabled && effectiveUser.isParent && (
                   <ListItemSecondaryAction>
                     <IconButton
                       edge="end"
-                      onClick={() => handleEditPin(currentUser.id)}
+                      onClick={() => handleEditPin(effectiveUser.id)}
                       size="small"
                     >
                       <Edit />
@@ -301,7 +304,7 @@ const Profile: React.FC = () => {
 
               {/* Other family members */}
               {family
-                .filter(member => member.id !== currentUser.id)
+                .filter(member => member.id !== effectiveUser.id)
                 .map((member, index, array) => (
                   <React.Fragment key={member.id}>
                     <ListItem>
@@ -319,7 +322,7 @@ const Profile: React.FC = () => {
                                 differenceInYears(new Date(), parseISO(member.birthDate))
                               } ans
                             </Typography>
-                            {(tabletConfig.enabled || currentUser.isParent) && (
+                            {(tabletConfig.enabled || effectiveUser.isParent) && (
                               <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
                                 {tabletConfig.enabled ? (
                                   <Chip 
@@ -345,7 +348,7 @@ const Profile: React.FC = () => {
                           </Box>
                         }
                       />
-                      {tabletConfig.enabled && currentUser.isParent && (
+                      {tabletConfig.enabled && effectiveUser.isParent && (
                         <ListItemSecondaryAction>
                           <IconButton
                             edge="end"

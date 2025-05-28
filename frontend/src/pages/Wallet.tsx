@@ -44,7 +44,7 @@ import { walletService } from '../services/api';
 import Layout from '../components/Layout/Layout';
 
 const WalletPage: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,15 +61,18 @@ const WalletPage: React.FC = () => {
   const [reprocessError, setReprocessError] = useState<string | null>(null);
   const [reprocessSuccess, setReprocessSuccess] = useState<string | null>(null);
 
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
+  
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
 
   useEffect(() => {
     // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
-    if (authState.currentUser?.isParent && children.length > 0 && !selectedChild) {
+    if (effectiveUser?.isParent && children.length > 0 && !selectedChild) {
       setSelectedChild(children[0].id);
     }
-  }, [authState.currentUser, children, selectedChild]);
+  }, [effectiveUser, children, selectedChild]);
 
   useEffect(() => {
     // Initialize default dates for reprocessing (last 2 days)
@@ -88,9 +91,9 @@ const WalletPage: React.FC = () => {
         setError(null);
 
         // Déterminer l'ID de l'enfant dont on veut voir le portefeuille
-        const childId = authState.currentUser?.isParent 
+        const childId = effectiveUser?.isParent 
           ? selectedChild 
-          : authState.currentUser?.id;
+          : effectiveUser?.id;
 
         if (childId) {
           const fetchedWallet = await walletService.getChildWallet(childId);
@@ -107,16 +110,16 @@ const WalletPage: React.FC = () => {
       }
     };
 
-    if (authState.currentUser && (selectedChild || !authState.currentUser.isParent)) {
+    if (effectiveUser && (selectedChild || !effectiveUser.isParent)) {
       fetchWalletData();
     }
 
     // S'abonner aux changements du portefeuille
     const unsubscribe = walletService.subscribe(() => {
-      if (authState.currentUser) {
-        const childId = authState.currentUser.isParent 
+      if (effectiveUser) {
+        const childId = effectiveUser.isParent 
           ? selectedChild 
-          : authState.currentUser.id;
+          : effectiveUser.id;
         
         if (childId) {
           walletService.getChildWallet(childId).then(setWallet);
@@ -128,7 +131,7 @@ const WalletPage: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [authState.currentUser, selectedChild]);
+  }, [effectiveUser, selectedChild]);
 
   const handleChildSelect = (childId: string) => {
     setSelectedChild(childId);
@@ -150,9 +153,9 @@ const WalletPage: React.FC = () => {
 
   const handleConvertToRealMoney = async () => {
     try {
-      if (!selectedChild && !authState.currentUser) return;
+      if (!selectedChild && !effectiveUser) return;
       
-      const childId = selectedChild || (authState.currentUser?.id || '');
+      const childId = selectedChild || (effectiveUser?.id || '');
       
       if (convertAmount <= 0) {
         setConvertError('Le montant doit être supérieur à 0');
@@ -244,9 +247,9 @@ const WalletPage: React.FC = () => {
     <Layout>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
-          {authState.currentUser?.isParent ? 'Gestion des Portefeuilles' : 'Mon portefeuille'}
+          {effectiveUser?.isParent ? 'Gestion des Portefeuilles' : 'Mon portefeuille'}
         </Typography>
-        {authState.currentUser?.isParent ? (
+        {effectiveUser?.isParent ? (
           <Typography variant="subtitle1">
             Gérez les portefeuilles de vos enfants et retraitez les récompenses
           </Typography>
@@ -258,7 +261,7 @@ const WalletPage: React.FC = () => {
       </Box>
 
       {/* Admin section for parents */}
-      {authState.currentUser?.isParent && (
+      {effectiveUser?.isParent && (
         <Accordion sx={{ mb: 4 }}>
           <AccordionSummary expandIcon={<ExpandMore />}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -346,7 +349,7 @@ const WalletPage: React.FC = () => {
       )}
 
       {/* Sélecteur d'enfant pour les parents */}
-      {authState.currentUser?.isParent && children.length > 0 && (
+      {effectiveUser?.isParent && children.length > 0 && (
         <Card sx={{ mb: 4, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200' }}>
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -402,13 +405,13 @@ const WalletPage: React.FC = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <AccountBalance fontSize="large" sx={{ mr: 2 }} />
                 <Typography variant="h5">
-                  Solde actuel {authState.currentUser?.isParent && selectedChild && `de ${getUserName(selectedChild)}`}
+                  Solde actuel {effectiveUser?.isParent && selectedChild && `de ${getUserName(selectedChild)}`}
                 </Typography>
               </Box>
               <Typography variant="h3" color="primary" sx={{ mb: 2 }}>
                 {wallet.balance.toFixed(2)} €
               </Typography>
-              {authState.currentUser?.isParent ? (
+              {effectiveUser?.isParent ? (
                 <Button 
                   variant="contained" 
                   color="primary"
@@ -488,7 +491,7 @@ const WalletPage: React.FC = () => {
 
           {/* Dialogue de conversion en argent réel */}
           <Dialog open={openConvertDialog} onClose={handleCloseConvertDialog}>
-            <DialogTitle>Convertir en {authState.currentUser?.isParent ? 'euros réels' : 'argent réel'}</DialogTitle>
+            <DialogTitle>Convertir en {effectiveUser?.isParent ? 'euros réels' : 'argent réel'}</DialogTitle>
             <DialogContent>
               <Typography variant="body1" paragraph>
                 Solde actuel: {wallet.balance.toFixed(2)} €
@@ -507,7 +510,7 @@ const WalletPage: React.FC = () => {
                 error={!!convertError}
                 helperText={convertError}
               />
-              {!authState.currentUser?.isParent && (
+              {!effectiveUser?.isParent && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                   Cette action demandera à un parent de vous donner l'équivalent en argent réel.
                 </Typography>
