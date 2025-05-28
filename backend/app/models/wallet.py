@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, Float, DateTime, String, ForeignKey, UniqueConstraint, Date, func
+from sqlalchemy import Column, Float, DateTime, String, ForeignKey, Date, func, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -26,12 +26,11 @@ class WalletTransaction(Base):
     contract = relationship("Contract")
 
     __table_args__ = (
-        UniqueConstraint(
-            'child_id', 
-            'contract_id', 
-            'date_only', 
-            'reason',
-            name='uq_daily_reward_per_child_contract_date',
+        # Create a partial unique index for daily rewards only
+        Index(
+            'uq_daily_reward_per_child_contract_date',
+            'child_id', 'contract_id', 'date_only', 'reason',
+            unique=True,
             postgresql_where=(reason == 'Récompense journalière')
         ),
     )
