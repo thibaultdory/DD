@@ -47,6 +47,7 @@ const Profile: React.FC = () => {
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [editPin, setEditPin] = useState('');
   const [showDetectionInfo, setShowDetectionInfo] = useState(false);
+  const [pendingPins, setPendingPins] = useState<Record<string, string>>({});
   
   if (!authState.currentUser) {
     return (
@@ -66,9 +67,37 @@ const Profile: React.FC = () => {
     if (tabletConfig.enabled) {
       disableTabletMode();
     } else {
-      // Auto-create profiles when enabling tablet mode
-      autoCreateProfilesFromFamily(authState.family);
+      // Create profiles with pending PINs or defaults
+      const profilesData = [...family, currentUser].map(member => {
+        const pendingPin = pendingPins[member.id];
+        return {
+          id: `profile_${member.id}_${Date.now()}`,
+          userId: member.id,
+          name: member.name,
+          pin: pendingPin || (member.isParent ? '0000' : '1234'),
+          isParent: member.isParent,
+          avatar: member.profilePicture,
+          color: getDefaultColorForUser(member.name)
+        };
+      });
+      
+      // Auto-create profiles with custom PINs
+      autoCreateProfilesFromFamily([...family, currentUser]);
+      
+      // Update with custom PINs after creation
+      setTimeout(() => {
+        profilesData.forEach(profileData => {
+          if (pendingPins[profileData.userId]) {
+            const createdProfile = pinAuthState.availableProfiles.find(p => p.userId === profileData.userId);
+            if (createdProfile) {
+              updateProfile(createdProfile.id, { pin: pendingPins[profileData.userId] });
+            }
+          }
+        });
+      }, 100);
+      
       enableTabletMode();
+      setPendingPins({}); // Clear pending PINs
     }
   };
 
@@ -91,9 +120,27 @@ const Profile: React.FC = () => {
     setEditPin('');
   };
 
+  const handlePendingPinChange = (memberId: string, pin: string): void => {
+    setPendingPins(prev => ({
+      ...prev,
+      [memberId]: pin
+    }));
+  };
+
   const getPinForMember = (memberId: string): string | null => {
-    const profile = pinAuthState.availableProfiles.find(p => p.userId === memberId);
-    return profile ? profile.pin : null;
+    if (tabletConfig.enabled) {
+      const profile = pinAuthState.availableProfiles.find(p => p.userId === memberId);
+      return profile ? profile.pin : null;
+    } else {
+      // Show pending PIN or default
+      return pendingPins[memberId] || null;
+    }
+  };
+
+  const getDefaultColorForUser = (name: string): string => {
+    const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
   };
 
   const detectionResults = getTabletDetectionResults();
@@ -171,13 +218,20 @@ const Profile: React.FC = () => {
                 />
                 <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
                   Le mode tablette active l'authentification par PIN et la déconnexion automatique.
-                  {!tabletConfig.enabled && " Les codes PIN seront créés automatiquement."}
+                  {!tabletConfig.enabled && " Configurez les codes PIN ci-dessous avant d'activer."}
                 </Typography>
                 
-                {tabletConfig.enabled && (
-                  <Alert severity="info" sx={{ mt: 2 }}>
+                {tabletConfig.enabled ? (
+                  <Alert severity="success" sx={{ mt: 2 }}>
                     <Typography variant="body2">
                       Mode tablette actif. Cliquez sur l'icône d'édition à côté de chaque membre pour modifier son code PIN.
+                    </Typography>
+                  </Alert>
+                ) : (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="body2">
+                      Configurez les codes PIN pour chaque membre de la famille ci-dessous, puis activez le mode tablette.
+                      Les codes par défaut sont : Parents (0000), Enfants (1234).
                     </Typography>
                   </Alert>
                 )}
@@ -204,14 +258,28 @@ const Profile: React.FC = () => {
                       <Typography variant="body2" color="textSecondary">
                         {currentUser.isParent ? 'Parent' : 'Enfant'} - {age} ans
                       </Typography>
-                      {tabletConfig.enabled && (
-                        <Chip 
-                          label={`PIN: ${getPinForMember(currentUser.id) || 'Non configuré'}`}
-                          size="small"
-                          variant="outlined"
-                          color={getPinForMember(currentUser.id) === '0000' || getPinForMember(currentUser.id) === '1234' ? 'warning' : 'success'}
-                          sx={{ mt: 1 }}
-                        />
+                      {(tabletConfig.enabled || currentUser.isParent) && (
+                        <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {tabletConfig.enabled ? (
+                            <Chip 
+                              label={`PIN: ${getPinForMember(currentUser.id) || 'Non configuré'}`}
+                              size="small"
+                              variant="outlined"
+                              color={getPinForMember(currentUser.id) === '0000' || getPinForMember(currentUser.id) === '1234' ? 'warning' : 'success'}
+                            />
+                          ) : (
+                            <TextField
+                              size="small"
+                              label="Code PIN"
+                              type="password"
+                              value={pendingPins[currentUser.id] || ''}
+                              onChange={(e) => handlePendingPinChange(currentUser.id, e.target.value)}
+                              placeholder={currentUser.isParent ? '0000' : '1234'}
+                              inputProps={{ maxLength: 6 }}
+                              sx={{ width: 120 }}
+                            />
+                          )}
+                        </Box>
                       )}
                     </Box>
                   }
@@ -251,14 +319,28 @@ const Profile: React.FC = () => {
                                 differenceInYears(new Date(), parseISO(member.birthDate))
                               } ans
                             </Typography>
-                            {tabletConfig.enabled && (
-                              <Chip 
-                                label={`PIN: ${getPinForMember(member.id) || 'Non configuré'}`}
-                                size="small"
-                                variant="outlined"
-                                color={getPinForMember(member.id) === '0000' || getPinForMember(member.id) === '1234' ? 'warning' : 'success'}
-                                sx={{ mt: 1 }}
-                              />
+                            {(tabletConfig.enabled || currentUser.isParent) && (
+                              <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {tabletConfig.enabled ? (
+                                  <Chip 
+                                    label={`PIN: ${getPinForMember(member.id) || 'Non configuré'}`}
+                                    size="small"
+                                    variant="outlined"
+                                    color={getPinForMember(member.id) === '0000' || getPinForMember(member.id) === '1234' ? 'warning' : 'success'}
+                                  />
+                                ) : (
+                                  <TextField
+                                    size="small"
+                                    label="Code PIN"
+                                    type="password"
+                                    value={pendingPins[member.id] || ''}
+                                    onChange={(e) => handlePendingPinChange(member.id, e.target.value)}
+                                    placeholder={member.isParent ? '0000' : '1234'}
+                                    inputProps={{ maxLength: 6 }}
+                                    sx={{ width: 120 }}
+                                  />
+                                )}
+                              </Box>
                             )}
                           </Box>
                         }
