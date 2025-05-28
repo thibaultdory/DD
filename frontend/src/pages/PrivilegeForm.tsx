@@ -25,10 +25,13 @@ import Layout from '../components/Layout/Layout';
 import { format } from 'date-fns';
 
 const PrivilegeForm: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const navigate = useNavigate();
   const { privilegeId } = useParams<{ privilegeId: string }>();
-  const isEditing = !!privilegeId;
+  const isEditing = Boolean(privilegeId);
+
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -128,12 +131,16 @@ const PrivilegeForm: React.FC = () => {
     }
   };
 
-  if (!authState.currentUser?.isParent) {
+  // Only parents can access this page
+  if (!effectiveUser?.isParent) {
     return (
       <Layout>
-        <Alert severity="warning">
-          Seuls les parents peuvent créer ou modifier des privilèges
-        </Alert>
+        <Typography variant="h4" color="error">
+          Accès non autorisé
+        </Typography>
+        <Typography>
+          Seuls les parents peuvent créer ou modifier des privilèges.
+        </Typography>
       </Layout>
     );
   }

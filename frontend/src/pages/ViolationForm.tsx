@@ -24,10 +24,13 @@ import { format } from 'date-fns';
 import { Rule } from '../types';
 
 const ViolationForm: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const navigate = useNavigate();
   const { violationId } = useParams<{ violationId: string }>();
-  const isEditing = !!violationId;
+  const isEditing = Boolean(violationId);
+
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
 
   const [ruleId, setRuleId] = useState('');
   const [childId, setChildId] = useState('');
@@ -134,12 +137,16 @@ const ViolationForm: React.FC = () => {
     }
   };
 
-  if (!authState.currentUser?.isParent) {
+  // Only parents can access this page
+  if (!effectiveUser?.isParent) {
     return (
       <Layout>
-        <Alert severity="warning">
-          Seuls les parents peuvent créer ou modifier des infractions
-        </Alert>
+        <Typography variant="h4" color="error">
+          Accès non autorisé
+        </Typography>
+        <Typography>
+          Seuls les parents peuvent créer ou modifier des infractions.
+        </Typography>
       </Layout>
     );
   }

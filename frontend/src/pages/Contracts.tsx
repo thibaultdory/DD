@@ -45,7 +45,7 @@ interface ContractFormData {
 }
 
 const Contracts: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [availableRules, setAvailableRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,14 +62,17 @@ const Contracts: React.FC = () => {
     active: true
   });
 
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [fetchedContracts, fetchedRules] = await Promise.all([
-          authState.currentUser?.isParent 
+          effectiveUser?.isParent 
             ? contractService.getContracts()
-            : authState.currentUser 
-              ? contractService.getChildContracts(authState.currentUser.id)
+            : effectiveUser 
+              ? contractService.getChildContracts(effectiveUser.id)
               : [],
           ruleService.getRules()
         ]);
@@ -84,7 +87,7 @@ const Contracts: React.FC = () => {
     };
 
     fetchData();
-  }, [authState.currentUser]);
+  }, [effectiveUser]);
 
   const handleOpenDialog = (contract?: Contract) => {
     if (contract) {
@@ -104,7 +107,7 @@ const Contracts: React.FC = () => {
       setFormData({
         title: '',
         childId: '',
-        parentId: authState.currentUser?.id || '',
+        parentId: effectiveUser?.id || '',
         ruleIds: [],
         dailyReward: 1,
         startDate: new Date().toISOString().split('T')[0],
@@ -222,6 +225,20 @@ const Contracts: React.FC = () => {
     return authState.family.filter(user => user.isParent);
   };
 
+  // Only parents can access this page
+  if (!effectiveUser?.isParent) {
+    return (
+      <Layout>
+        <Typography variant="h4" color="error">
+          Accès non autorisé
+        </Typography>
+        <Typography>
+          Seuls les parents peuvent gérer les contrats.
+        </Typography>
+      </Layout>
+    );
+  }
+
   if (loading) {
     return <Typography>Chargement...</Typography>;
   }
@@ -233,7 +250,7 @@ const Contracts: React.FC = () => {
           <Typography variant="h4" gutterBottom>
             Contrats
           </Typography>
-          {authState.currentUser?.isParent && (
+          {effectiveUser?.isParent && (
             <Button 
               variant="contained" 
               startIcon={<Add />}
@@ -253,7 +270,7 @@ const Contracts: React.FC = () => {
           <Typography variant="body1" color="text.secondary">
             Aucun contrat à afficher
           </Typography>
-          {authState.currentUser?.isParent && (
+          {effectiveUser?.isParent && (
             <Button 
               variant="outlined" 
               startIcon={<Add />} 
@@ -316,7 +333,7 @@ const Contracts: React.FC = () => {
                   </List>
                 </CardContent>
                 
-                {authState.currentUser?.isParent && (
+                {effectiveUser?.isParent && (
                   <CardActions>
                     {contract.active ? (
                       <>

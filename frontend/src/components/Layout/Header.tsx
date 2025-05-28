@@ -2,15 +2,29 @@ import React from 'react';
 import { AppBar, Toolbar, Typography, Button, Avatar, Box, IconButton, Menu, MenuItem, useTheme, useMediaQuery } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePin } from '../../contexts/PinContext';
 import { AccountCircle, ExitToApp, Menu as MenuIcon } from '@mui/icons-material';
 
 const Header: React.FC = () => {
-  const { authState, logout } = useAuth();
+  const { authState, logout, getEffectiveCurrentUser } = useAuth();
+  const { logoutPin } = usePin();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [mobileMenuAnchorEl, setMobileMenuAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
+
+  // Debug logging for effective user changes
+  React.useEffect(() => {
+    console.log('Header: Effective user changed:', {
+      effectiveUser: effectiveUser?.name,
+      isParent: effectiveUser?.isParent,
+      userId: effectiveUser?.id
+    });
+  }, [effectiveUser]);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -29,6 +43,9 @@ const Header: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    // Clear PIN authentication first
+    logoutPin();
+    // Then perform Google logout
     await logout();
     handleClose();
     handleMobileMenuClose();
@@ -89,7 +106,7 @@ const Header: React.FC = () => {
                 >
                   <MenuItem onClick={() => handleNavigation('/')}>Accueil</MenuItem>
                   <MenuItem onClick={() => handleNavigation('/calendar')}>Calendrier</MenuItem>
-                  {authState.currentUser?.isParent && (
+                  {effectiveUser?.isParent && (
                     <>
                       <MenuItem onClick={() => handleNavigation('/contracts')}>Contrats</MenuItem>
                       <MenuItem onClick={() => handleNavigation('/rules')}>Règles</MenuItem>
@@ -97,7 +114,7 @@ const Header: React.FC = () => {
                     </>
                   )}
                   <MenuItem onClick={handleProfile}>Profil</MenuItem>
-                  {!authState.currentUser?.isParent && (
+                  {!effectiveUser?.isParent && (
                     <MenuItem onClick={() => handleNavigation('/wallet')}>Mon portefeuille</MenuItem>
                   )}
                   <MenuItem onClick={handleLogout}>
@@ -122,7 +139,7 @@ const Header: React.FC = () => {
                 >
                   Calendrier
                 </Button>
-                {authState.currentUser?.isParent && (
+                {effectiveUser?.isParent && (
                   <>
                     <Button 
                       color="inherit" 
@@ -152,10 +169,10 @@ const Header: React.FC = () => {
                   onClick={handleMenu}
                   color="inherit"
                 >
-                  {authState.currentUser?.profilePicture ? (
+                  {effectiveUser?.profilePicture ? (
                     <Avatar 
-                      src={authState.currentUser.profilePicture} 
-                      alt={authState.currentUser.name}
+                      src={effectiveUser.profilePicture} 
+                      alt={effectiveUser.name}
                       sx={{ width: 32, height: 32 }}
                     />
                   ) : (
@@ -178,7 +195,7 @@ const Header: React.FC = () => {
                   onClose={handleClose}
                 >
                   <MenuItem onClick={handleProfile}>Profil</MenuItem>
-                  {!authState.currentUser?.isParent && (
+                  {!effectiveUser?.isParent && (
                     <MenuItem onClick={() => handleNavigation('/wallet')}>
                       Mon portefeuille
                     </MenuItem>

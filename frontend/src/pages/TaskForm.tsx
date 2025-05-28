@@ -32,10 +32,13 @@ import Layout from '../components/Layout/Layout';
 import { format, addWeeks, addMonths, addYears } from 'date-fns';
 
 const TaskForm: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const navigate = useNavigate();
   const { taskId } = useParams<{ taskId: string }>();
-  const isEditing = !!taskId;
+  const isEditing = Boolean(taskId);
+
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -188,12 +191,16 @@ const TaskForm: React.FC = () => {
     setAssignedTo(typeof value === 'string' ? value.split(',') : value);
   };
 
-  if (!authState.currentUser?.isParent) {
+  // Only parents can access this page
+  if (!effectiveUser?.isParent) {
     return (
       <Layout>
-        <Alert severity="warning">
-          Seuls les parents peuvent créer ou modifier des tâches
-        </Alert>
+        <Typography variant="h4" color="error">
+          Accès non autorisé
+        </Typography>
+        <Typography>
+          Seuls les parents peuvent créer ou modifier des tâches.
+        </Typography>
       </Layout>
     );
   }

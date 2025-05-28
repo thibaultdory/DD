@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { AuthState, PinAuthState, User } from '../types';
 import { authService, API_BASE_URL } from '../services/api';
 
@@ -114,15 +114,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Fonction pour mettre à jour l'état PIN
-  const updatePinAuth = (pinAuth: PinAuthState) => {
+  const updatePinAuth = useCallback((pinAuth: PinAuthState) => {
     setAuthState(prev => ({
       ...prev,
       pinAuth
     }));
-  };
+  }, []);
 
-  // Fonction pour obtenir l'utilisateur effectif (Google ou PIN)
-  const getEffectiveCurrentUser = (): User | null => {
+  // Fonction pour obtenir l'utilisateur effectif (Google ou PIN) - memoized
+  const getEffectiveCurrentUser = useCallback((): User | null => {
     // If PIN authentication is active and we have a current PIN profile
     if (authState.pinAuth?.isPinAuthenticated && authState.pinAuth.currentPinProfile) {
       const pinProfile = authState.pinAuth.currentPinProfile;
@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Default to Google authenticated user
     return authState.currentUser;
-  };
+  }, [authState.pinAuth, authState.currentUser, authState.family]);
 
   // Valeur du contexte
   const value = {

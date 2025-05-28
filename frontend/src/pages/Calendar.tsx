@@ -97,7 +97,7 @@ const TYPE_COLORS = {
 };
 
 const Calendar: React.FC = () => {
-  const { authState } = useAuth();
+  const { authState, getEffectiveCurrentUser } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -126,6 +126,9 @@ const Calendar: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [deleteChoice, setDeleteChoice] = useState<'single' | 'series'>('single');
+
+  // Get the effective current user (considering PIN authentication)
+  const effectiveUser = getEffectiveCurrentUser();
 
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
@@ -236,7 +239,7 @@ const Calendar: React.FC = () => {
 
   // Fetch data for the specific date range being displayed
   useEffect(() => {
-    if (!authState.currentUser || initialLoading) return;
+    if (!effectiveUser || initialLoading) return;
     
     const fetchDataForCurrentPeriod = async () => {
       // Calculate days to display inside the effect to avoid dependency issues
@@ -261,18 +264,18 @@ const Calendar: React.FC = () => {
     // Debounce the fetch to avoid excessive calls during rapid navigation
     const timeoutId = setTimeout(fetchDataForCurrentPeriod, 300);
     return () => clearTimeout(timeoutId);
-  }, [selectedDate, calendarView, authState.currentUser, initialLoading, refreshFamilyDataForDateRange]);
+  }, [selectedDate, calendarView, effectiveUser, initialLoading, refreshFamilyDataForDateRange]);
 
   useEffect(() => {
     // Si l'utilisateur est un parent et qu'il y a des enfants, sélectionner le premier enfant par défaut
-    if (authState.currentUser?.isParent && children.length > 0 && !selectedChild && viewMode === 'personal') {
+    if (effectiveUser?.isParent && children.length > 0 && !selectedChild && viewMode === 'personal') {
       setSelectedChild(children[0].id);
     }
-  }, [authState.currentUser, children, selectedChild, viewMode]);
+  }, [effectiveUser, children, selectedChild, viewMode]);
 
   // Update displayed data when cache, view mode, or selected date changes
   useEffect(() => {
-    if (!authState.currentUser || initialLoading) return;
+    if (!effectiveUser || initialLoading) return;
 
     if (viewMode === 'family') {
       // Family view - show all data
@@ -281,9 +284,9 @@ const Calendar: React.FC = () => {
       setViolations(familyViolations || []);
     } else {
       // Personal view - filter data for specific user
-      const userId = authState.currentUser.isParent && selectedChild 
+      const userId = effectiveUser.isParent && selectedChild 
         ? selectedChild 
-        : authState.currentUser.id;
+        : effectiveUser.id;
       
       // Use cached data for tasks
       const userTasks = getCalendarTasks(userId);
@@ -301,7 +304,7 @@ const Calendar: React.FC = () => {
       setViolations(userViolations);
     }
   }, [
-    authState.currentUser, 
+    effectiveUser, 
     familyTasks, 
     familyPrivileges, 
     familyViolations, 
@@ -403,7 +406,7 @@ const Calendar: React.FC = () => {
   const getPrivilegesForDay = (date: Date) => {
     const dayPrivileges = Array.isArray(privileges) ? privileges.filter(privilege => isSameDay(parseISO(privilege.date), date)) : [];
     // Filter out privileges that children can't view in family mode
-    if (!authState.currentUser?.isParent && viewMode === 'family') {
+    if (!effectiveUser?.isParent && viewMode === 'family') {
       return dayPrivileges.filter(privilege => privilege.canView !== false);
     }
     return dayPrivileges;
@@ -412,7 +415,7 @@ const Calendar: React.FC = () => {
   const getViolationsForDay = (date: Date) => {
     const dayViolations = Array.isArray(violations) ? violations.filter(violation => isSameDay(parseISO(violation.date), date)) : [];
     // Filter out violations that children can't view in family mode
-    if (!authState.currentUser?.isParent && viewMode === 'family') {
+    if (!effectiveUser?.isParent && viewMode === 'family') {
       return dayViolations.filter(violation => violation.canView !== false);
     }
     return dayViolations;
@@ -580,7 +583,7 @@ const Calendar: React.FC = () => {
                       {calendarView === 'week' && (
                         <>
                           {/* Edit and Delete buttons for parents who created the task */}
-                          {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                          {effectiveUser?.isParent && task.createdBy === effectiveUser.id && (
                             <>
                               <Tooltip title="Modifier la tâche">
                                 <IconButton 
@@ -1040,7 +1043,7 @@ const Calendar: React.FC = () => {
                                   </Tooltip>
                                   
                                   {/* Task action buttons */}
-                                  {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                                  {effectiveUser?.isParent && task.createdBy === effectiveUser.id && (
                                     <>
                                       <Tooltip title="Modifier la tâche">
                                         <IconButton 
@@ -1430,7 +1433,7 @@ const Calendar: React.FC = () => {
       </Box>
 
       {/* Sélecteur d'enfant pour les parents en vue personnelle */}
-      {authState.currentUser?.isParent && viewMode === 'personal' && children.length > 0 && (
+      {effectiveUser?.isParent && viewMode === 'personal' && children.length > 0 && (
         <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
           <Typography variant="subtitle1" sx={{ mr: 2 }}>
             Afficher le calendrier de :
@@ -1625,7 +1628,7 @@ const Calendar: React.FC = () => {
           {selectedItemType === 'task' && selectedItem && (
             <>
               {/* Edit and Delete buttons for parents who created the task */}
-              {authState.currentUser?.isParent && selectedItem.createdBy === authState.currentUser.id && (
+              {effectiveUser?.isParent && selectedItem.createdBy === effectiveUser.id && (
                 <>
                   <Button 
                     onClick={() => {
