@@ -16,6 +16,7 @@ import { format, parseISO, differenceInYears } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
 import Layout from '../components/Layout/Layout';
+import TabletSettings from '../components/TabletSettings/TabletSettings';
 
 const Profile: React.FC = () => {
   const { authState } = useAuth();
@@ -68,7 +69,7 @@ const Profile: React.FC = () => {
         </Grid>
 
         <Grid size={{ xs: 12, md: 8 }}>
-          <Paper sx={{ p: 3 }}>
+          <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>
               Membres de la famille
             </Typography>
@@ -95,6 +96,13 @@ const Profile: React.FC = () => {
                 ))}
             </List>
           </Paper>
+
+          {/* Tablet Settings - Only show for parents */}
+          {currentUser.isParent && (
+            <Paper sx={{ p: 3 }}>
+              <TabletSettings />
+            </Paper>
+          )}
         </Grid>
       </Grid>
     </Layout>

@@ -7,6 +7,32 @@ export interface User {
   profilePicture?: string;
 }
 
+// Types pour les profils PIN (frontend uniquement)
+export interface PinProfile {
+  id: string;
+  userId: string;
+  name: string;
+  pin: string;
+  isParent: boolean;
+  avatar?: string;
+  color?: string;
+}
+
+// Types pour la configuration tablette
+export interface TabletConfig {
+  enabled: boolean;
+  autoLogoutOnScreenOff: boolean;
+  profiles: PinProfile[];
+}
+
+// Types pour l'état PIN
+export interface PinAuthState {
+  isTabletMode: boolean;
+  isPinAuthenticated: boolean;
+  currentPinProfile: PinProfile | null;
+  availableProfiles: PinProfile[];
+}
+
 // Types pour les tâches
 export interface Task {
   id: string;
@@ -89,4 +115,5 @@ export interface AuthState {
   isAuthenticated: boolean;
   currentUser: User | null;
   family: User[];
+  pinAuth?: PinAuthState;
 }

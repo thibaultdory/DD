@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthState } from '../types';
+import { AuthState, PinAuthState } from '../types';
 import { authService, API_BASE_URL } from '../services/api';
 
 // Valeurs par défaut du contexte
 const defaultAuthState: AuthState = {
   isAuthenticated: false,
   currentUser: null,
-  family: []
+  family: [],
+  pinAuth: undefined
 };
 
 // Création du contexte
@@ -16,12 +17,14 @@ const AuthContext = createContext<{
   logout: () => Promise<void>;
   authError: string | null;
   clearAuthError: () => void;
+  updatePinAuth: (pinAuth: PinAuthState) => void;
 }>({
   authState: defaultAuthState,
   login: async () => {},
   logout: async () => {},
   authError: null,
-  clearAuthError: () => {}
+  clearAuthError: () => {},
+  updatePinAuth: () => {}
 });
 
 // Hook personnalisé pour utiliser le contexte d'authentification
@@ -73,7 +76,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setAuthState({
             isAuthenticated: true,
             currentUser: user,
-            family
+            family,
+            pinAuth: undefined
           });
         }
       } catch (error) {
@@ -107,13 +111,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setAuthError(null);
   };
 
+  // Fonction pour mettre à jour l'état PIN
+  const updatePinAuth = (pinAuth: PinAuthState) => {
+    setAuthState(prev => ({
+      ...prev,
+      pinAuth
+    }));
+  };
+
   // Valeur du contexte
   const value = {
     authState,
     login,
     logout,
     authError,
-    clearAuthError
+    clearAuthError,
+    updatePinAuth
   };
 
   if (loading) {
