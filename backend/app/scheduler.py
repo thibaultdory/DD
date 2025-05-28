@@ -1,9 +1,9 @@
 from datetime import date, timedelta
-from sqlalchemy import select
+from sqlalchemy import select, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 import logging
-from app.models.task import Task
+from app.models.task import Task, task_assignments
 from app.core.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
@@ -76,12 +76,16 @@ async def create_recurring_task_instances():
                         db.add(new_instance)
                         await db.flush()  # Flush to get the ID
                         
-                        # Now copy the assignments using the association table
+                        # Now copy the assignments using direct SQL inserts to avoid relationship issues
                         for assigned_user in task.assigned_to:
-                            # Add the assignment relationship
-                            new_instance.assigned_to.append(assigned_user)
+                            # Insert directly into the association table
+                            assignment_stmt = insert(task_assignments).values(
+                                task_id=new_instance.id,
+                                user_id=assigned_user.id
+                            )
+                            await db.execute(assignment_stmt)
                         
-                        logger.info(f"   ✅ Created task instance for {task_date} (weekday {weekday})")
+                        logger.info(f"   ✅ Created task instance for {task_date} (weekday {weekday}) with {len(task.assigned_to)} assignments")
                         instances_created_for_task += 1
                         total_instances_created += 1
                     else:

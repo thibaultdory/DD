@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 import logging # Import logging
 from app.models import Contract, Task, task_assignments, RuleViolation, Wallet, WalletTransaction
 from app.core.database import AsyncSessionLocal
@@ -29,7 +30,12 @@ async def process_daily_rewards_for_date(target_date: date = None):
             
             if not contracts:
                 logger.info(f"✅ SCHEDULER: No active contracts found for {target_date} - processing complete")
-                return
+                return {
+                    "date": target_date.isoformat(),
+                    "rewards_processed": 0,
+                    "rewards_skipped": 0,
+                    "total_amount_credited": 0.0
+                }
 
             rewards_processed = 0
             rewards_skipped = 0
@@ -81,48 +87,57 @@ async def process_daily_rewards_for_date(target_date: date = None):
                 
                 logger.info(f"✅ SCHEDULER: Child {child_id} has no rule violations for {target_date}")
                 
-                # Check if reward already exists for this date and contract
-                start_of_day = datetime.combine(target_date, datetime.min.time())
-                end_of_day = start_of_day + timedelta(days=1)
-                
-                existing_transaction = await session.execute(
-                    select(WalletTransaction).where(
-                        WalletTransaction.child_id == child_id,
-                        WalletTransaction.contract_id == contract_id,
-                        WalletTransaction.date >= start_of_day,
-                        WalletTransaction.date < end_of_day,
-                        WalletTransaction.reason == "Récompense journalière"
-                    )
-                )
-                if existing_transaction.scalar_one_or_none():
-                    logger.info(f"⏭️  SCHEDULER: Reward already exists for child {child_id} on {target_date} for contract {contract_id} - skipping")
+                # Use atomic upsert to prevent duplicates
+                try:
+                    # Ensure wallet exists
+                    wallet = await session.get(Wallet, child_id)
+                    if not wallet:
+                        logger.info(f"💰 SCHEDULER: Creating new wallet for child {child_id}")
+                        wallet = Wallet(child_id=child_id, balance=0.0)
+                        session.add(wallet)
+                        await session.flush()  # Get the wallet ID
+                    
+                    # Use atomic upsert with ON CONFLICT DO NOTHING to prevent duplicates
+                    upsert_query = text("""
+                        INSERT INTO wallet_transactions (id, child_id, amount, reason, contract_id, date, date_only)
+                        VALUES (gen_random_uuid(), :child_id, :amount, :reason, :contract_id, :date, :date_only)
+                        ON CONFLICT ON CONSTRAINT uq_daily_reward_per_child_contract_date 
+                        DO NOTHING
+                        RETURNING id, amount
+                    """)
+                    
+                    result = await session.execute(upsert_query, {
+                        'child_id': child_id,
+                        'amount': daily_reward,
+                        'reason': 'Récompense journalière',
+                        'contract_id': contract_id,
+                        'date': datetime.now(),
+                        'date_only': target_date
+                    })
+                    
+                    inserted_row = result.fetchone()
+                    
+                    if inserted_row:
+                        # Transaction was inserted (not a duplicate)
+                        old_balance = wallet.balance
+                        wallet.balance += daily_reward
+                        new_balance = wallet.balance
+                        
+                        logger.info(f"💰 SCHEDULER: Credited €{daily_reward} to child {child_id} for contract {contract_id} (balance: €{old_balance:.2f} → €{new_balance:.2f})")
+                        
+                        rewards_processed += 1
+                        total_amount_credited += daily_reward
+                    else:
+                        # Transaction already exists (duplicate prevented)
+                        logger.info(f"⏭️  SCHEDULER: Reward already exists for child {child_id} on {target_date} for contract {contract_id} - skipping (prevented duplicate)")
+                        rewards_skipped += 1
+                        
+                except IntegrityError as e:
+                    # Fallback in case the constraint doesn't exist yet
+                    logger.warning(f"⚠️  SCHEDULER: Integrity error (likely duplicate) for child {child_id} on {target_date} - skipping: {e}")
                     rewards_skipped += 1
+                    await session.rollback()
                     continue
-                
-                # Credit wallet
-                wallet = await session.get(Wallet, child_id)
-                if not wallet:
-                    logger.info(f"💰 SCHEDULER: Creating new wallet for child {child_id}")
-                    wallet = Wallet(child_id=child_id, balance=0.0)
-                    session.add(wallet)
-                    await session.flush()  # Get the wallet ID
-                
-                old_balance = wallet.balance
-                wallet.balance += daily_reward
-                new_balance = wallet.balance
-                
-                transaction = WalletTransaction(
-                    child_id=child_id,
-                    amount=daily_reward,
-                    reason="Récompense journalière",
-                    contract_id=contract_id
-                )
-                session.add(transaction)
-                
-                logger.info(f"💰 SCHEDULER: Credited €{daily_reward} to child {child_id} for contract {contract_id} (balance: €{old_balance:.2f} → €{new_balance:.2f})")
-                
-                rewards_processed += 1
-                total_amount_credited += daily_reward
 
             await session.commit()
             
@@ -146,5 +161,8 @@ async def process_daily_rewards_for_date(target_date: date = None):
             raise
 
 async def process_daily_rewards():
-    """Process daily rewards for today (used by scheduler)."""
-    return await process_daily_rewards_for_date()
+    """Process daily rewards for yesterday (used by scheduler running at midnight)."""
+    # When running at midnight, we want to process rewards for the day that just ended
+    yesterday = date.today() - timedelta(days=1)
+    logger.info(f"🌙 SCHEDULER: Running at midnight - processing rewards for yesterday ({yesterday})")
+    return await process_daily_rewards_for_date(yesterday)
