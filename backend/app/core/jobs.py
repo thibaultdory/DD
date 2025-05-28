@@ -97,11 +97,11 @@ async def process_daily_rewards_for_date(target_date: date = None):
                         session.add(wallet)
                         await session.flush()  # Get the wallet ID
                     
-                    # Use atomic upsert with ON CONFLICT DO NOTHING to prevent duplicates
+                    # Use atomic upsert with ON CONFLICT on the unique index columns
                     upsert_query = text("""
                         INSERT INTO wallet_transactions (id, child_id, amount, reason, contract_id, date, date_only)
                         VALUES (gen_random_uuid(), :child_id, :amount, :reason, :contract_id, :date, :date_only)
-                        ON CONFLICT ON CONSTRAINT uq_daily_reward_per_child_contract_date 
+                        ON CONFLICT (child_id, contract_id, date_only, reason) 
                         DO NOTHING
                         RETURNING id, amount
                     """)
