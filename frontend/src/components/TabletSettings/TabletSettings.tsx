@@ -27,7 +27,7 @@ import {
   ListItemText,
   ListItemSecondaryAction
 } from '@mui/material';
-import { Add, Edit, Delete, Tablet, Info } from '@mui/icons-material';
+import { Add, Edit, Delete, Tablet, Info, Warning } from '@mui/icons-material';
 import { usePin } from '../../contexts/PinContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PinProfile } from '../../types';
@@ -43,17 +43,87 @@ const TabletSettings: React.FC = () => {
     updateProfile,
     removeProfile,
     isTabletModeAvailable,
-    getTabletDetectionResults
+    getTabletDetectionResults,
+    autoCreateProfilesFromFamily
   } = usePin();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingProfile, setEditingProfile] = useState<PinProfile | null>(null);
   const [showDetectionInfo, setShowDetectionInfo] = useState(false);
 
+  // If currently in tablet mode, show warning
+  if (pinAuthState.isTabletMode) {
+    return (
+      <Box>
+        <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tablet />
+          Paramètres Tablette
+        </Typography>
+
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            <Warning sx={{ mr: 1, verticalAlign: 'middle' }} />
+            Mode tablette actif
+          </Typography>
+          <Typography variant="body2">
+            Les paramètres de tablette ne peuvent être modifiés qu'en mode normal. 
+            Déconnectez-vous du mode PIN pour accéder aux paramètres complets.
+          </Typography>
+        </Alert>
+
+        {/* Show current profiles in read-only mode */}
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Profils actuels (lecture seule)
+            </Typography>
+            
+            {pinAuthState.availableProfiles.length === 0 ? (
+              <Alert severity="info">
+                Aucun profil configuré.
+              </Alert>
+            ) : (
+              <List>
+                {pinAuthState.availableProfiles.map((profile, index) => (
+                  <React.Fragment key={profile.id}>
+                    {index > 0 && <Divider />}
+                    <ListItem>
+                      <ListItemAvatar>
+                        <Avatar
+                          sx={{ bgcolor: getAvatarColor(profile) }}
+                          src={profile.avatar}
+                        >
+                          {!profile.avatar && getInitials(profile.name)}
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={profile.name}
+                        secondary={
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            {profile.isParent && (
+                              <Chip label="Parent" size="small" color="primary" variant="outlined" />
+                            )}
+                            <Chip label={`PIN: ${'•'.repeat(profile.pin.length)}`} size="small" variant="outlined" />
+                          </Box>
+                        }
+                      />
+                    </ListItem>
+                  </React.Fragment>
+                ))}
+              </List>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  }
+
   const handleToggleTabletMode = (): void => {
     if (tabletConfig.enabled) {
       disableTabletMode();
     } else {
+      // Auto-create profiles when enabling tablet mode
+      autoCreateProfilesFromFamily(authState.family);
       enableTabletMode();
     }
   };
@@ -142,6 +212,7 @@ const TabletSettings: React.FC = () => {
           
           <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
             Le mode tablette active l'authentification par PIN et la déconnexion automatique.
+            Les profils seront créés automatiquement à partir des membres de la famille.
           </Typography>
         </CardContent>
       </Card>
@@ -163,9 +234,19 @@ const TabletSettings: React.FC = () => {
               </Button>
             </Box>
 
+            {/* Show info about auto-created profiles */}
+            {pinAuthState.availableProfiles.length > 0 && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Codes PIN par défaut :</strong> Parents (0000), Enfants (1234). 
+                  Modifiez ces codes pour plus de sécurité.
+                </Typography>
+              </Alert>
+            )}
+
             {pinAuthState.availableProfiles.length === 0 ? (
               <Alert severity="info">
-                Aucun profil configuré. Ajoutez des profils pour permettre l'authentification par PIN.
+                Aucun profil configuré. Les profils seront créés automatiquement lors de l'activation du mode tablette.
               </Alert>
             ) : (
               <List>
@@ -188,7 +269,12 @@ const TabletSettings: React.FC = () => {
                             {profile.isParent && (
                               <Chip label="Parent" size="small" color="primary" variant="outlined" />
                             )}
-                            <Chip label={`PIN: ${'•'.repeat(profile.pin.length)}`} size="small" variant="outlined" />
+                            <Chip 
+                              label={`PIN: ${profile.pin === '0000' || profile.pin === '1234' ? profile.pin + ' (défaut)' : '•'.repeat(profile.pin.length)}`} 
+                              size="small" 
+                              variant="outlined"
+                              color={profile.pin === '0000' || profile.pin === '1234' ? 'warning' : 'default'}
+                            />
                           </Box>
                         }
                       />

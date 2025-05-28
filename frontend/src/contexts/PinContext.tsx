@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { PinProfile, PinAuthState, TabletConfig } from '../types';
+import { PinProfile, PinAuthState, TabletConfig, User } from '../types';
 import { TabletDetector, TabletDetectionOptions } from '../utils/tabletDetection';
 import { ScreenLockDetector } from '../utils/screenLockDetection';
 
@@ -32,6 +32,8 @@ interface PinContextType {
   disableTabletMode: () => void;
   isTabletModeAvailable: () => boolean;
   getTabletDetectionResults: () => Record<string, boolean>;
+  autoCreateProfilesFromFamily: (familyMembers: User[]) => void;
+  forceExitTabletMode: () => void;
 }
 
 // Create context
@@ -117,6 +119,54 @@ export const PinProvider: React.FC<PinProviderProps> = ({
       },
       debounceMs: 2000 // 2 second delay to avoid false positives
     });
+  };
+
+  // Auto-create profiles from family members
+  const autoCreateProfilesFromFamily = (familyMembers: User[]): void => {
+    const existingProfiles = tabletConfig.profiles;
+    const newProfiles: PinProfile[] = [];
+
+    familyMembers.forEach(member => {
+      // Check if profile already exists for this user
+      const existingProfile = existingProfiles.find(p => p.userId === member.id);
+      
+      if (!existingProfile) {
+        // Create new profile with default PIN
+        const newProfile: PinProfile = {
+          id: `profile_${member.id}_${Date.now()}`,
+          userId: member.id,
+          name: member.name,
+          pin: member.isParent ? '0000' : '1234', // Default PINs - parents should change these
+          isParent: member.isParent,
+          avatar: member.profilePicture,
+          color: getDefaultColorForUser(member.name)
+        };
+        newProfiles.push(newProfile);
+      } else {
+        newProfiles.push(existingProfile);
+      }
+    });
+
+    const newConfig: TabletConfig = {
+      ...tabletConfig,
+      enabled: true,
+      profiles: newProfiles
+    };
+    
+    setTabletConfig(newConfig);
+    setPinAuthState(prev => ({
+      ...prev,
+      availableProfiles: newProfiles
+    }));
+    
+    saveConfig(newConfig);
+  };
+
+  // Get default color for user
+  const getDefaultColorForUser = (name: string): string => {
+    const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
   };
 
   // Authenticate with PIN
@@ -240,6 +290,23 @@ export const PinProvider: React.FC<PinProviderProps> = ({
     saveConfig(newConfig);
   };
 
+  // Force exit tablet mode (emergency function)
+  const forceExitTabletMode = (): void => {
+    try {
+      localStorage.removeItem('dd_tablet_mode');
+      localStorage.removeItem('dd_tablet_config');
+      TabletDetector.disableTabletMode();
+      
+      setTabletConfig(defaultTabletConfig);
+      setPinAuthState(defaultPinAuthState);
+      
+      // Force reload to ensure clean state
+      window.location.reload();
+    } catch (error) {
+      console.error('Error forcing exit from tablet mode:', error);
+    }
+  };
+
   // Check if tablet mode is available
   const isTabletModeAvailable = (): boolean => {
     return TabletDetector.isTablet(tabletDetectionOptions);
@@ -262,7 +329,9 @@ export const PinProvider: React.FC<PinProviderProps> = ({
     enableTabletMode,
     disableTabletMode,
     isTabletModeAvailable,
-    getTabletDetectionResults
+    getTabletDetectionResults,
+    autoCreateProfilesFromFamily,
+    forceExitTabletMode
   };
 
   return (
