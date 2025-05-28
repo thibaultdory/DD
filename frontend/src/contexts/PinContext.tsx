@@ -160,6 +160,9 @@ export const PinProvider: React.FC<PinProviderProps> = ({
     }));
     
     saveConfig(newConfig);
+    
+    // Log for debugging
+    console.log('Auto-created profiles:', newProfiles);
   };
 
   // Get default color for user

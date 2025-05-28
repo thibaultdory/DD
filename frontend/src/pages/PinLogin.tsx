@@ -214,9 +214,12 @@ const PinLogin: React.FC = () => {
               {/* Show default PIN info for first-time users */}
               <Alert severity="info" sx={{ mt: 3 }}>
                 <Typography variant="body2">
-                  <strong>Codes PIN par défaut :</strong><br />
-                  • Parents : 0000<br />
-                  • Enfants : 1234<br />
+                  <strong>Codes PIN configurés :</strong><br />
+                  {pinAuthState.availableProfiles.map(profile => (
+                    <span key={profile.id}>
+                      • {profile.name} ({profile.isParent ? 'Parent' : 'Enfant'}) : <strong>{profile.pin}</strong><br />
+                    </span>
+                  ))}
                   <em>Les parents peuvent modifier ces codes dans les paramètres en mode normal.</em>
                 </Typography>
               </Alert>
