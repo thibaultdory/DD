@@ -1,7 +1,6 @@
 from datetime import date, datetime, timedelta
-from sqlalchemy import select, and_, text
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
 import logging # Import logging
 from app.models import Contract, Task, task_assignments, RuleViolation, Wallet, WalletTransaction
 from app.core.database import AsyncSessionLocal
@@ -87,7 +86,7 @@ async def process_daily_rewards_for_date(target_date: date = None):
                 
                 logger.info(f"✅ SCHEDULER: Child {child_id} has no rule violations for {target_date}")
                 
-                # Use atomic upsert to prevent duplicates
+                # Check for existing transactions and handle duplicates gracefully
                 try:
                     # Ensure wallet exists
                     wallet = await session.get(Wallet, child_id)
@@ -97,46 +96,51 @@ async def process_daily_rewards_for_date(target_date: date = None):
                         session.add(wallet)
                         await session.flush()  # Get the wallet ID
                     
-                    # Use atomic upsert with ON CONFLICT on the unique index columns
-                    upsert_query = text("""
-                        INSERT INTO wallet_transactions (id, child_id, amount, reason, contract_id, date, date_only)
-                        VALUES (gen_random_uuid(), :child_id, :amount, :reason, :contract_id, :date, :date_only)
-                        ON CONFLICT (child_id, contract_id, date_only, reason) 
-                        DO NOTHING
-                        RETURNING id, amount
-                    """)
+                    # Check if reward already exists for this date and contract
+                    start_of_day = datetime.combine(target_date, datetime.min.time())
+                    end_of_day = start_of_day + timedelta(days=1)
                     
-                    result = await session.execute(upsert_query, {
-                        'child_id': child_id,
-                        'amount': daily_reward,
-                        'reason': 'Récompense journalière',
-                        'contract_id': contract_id,
-                        'date': datetime.now(),
-                        'date_only': target_date
-                    })
+                    existing_transactions_result = await session.execute(
+                        select(WalletTransaction).where(
+                            WalletTransaction.child_id == child_id,
+                            WalletTransaction.contract_id == contract_id,
+                            WalletTransaction.date >= start_of_day,
+                            WalletTransaction.date < end_of_day,
+                            WalletTransaction.reason == "Récompense journalière"
+                        )
+                    )
+                    existing_transactions = existing_transactions_result.scalars().all()
                     
-                    inserted_row = result.fetchone()
-                    
-                    if inserted_row:
-                        # Transaction was inserted (not a duplicate)
-                        old_balance = wallet.balance
-                        wallet.balance += daily_reward
-                        new_balance = wallet.balance
-                        
-                        logger.info(f"💰 SCHEDULER: Credited €{daily_reward} to child {child_id} for contract {contract_id} (balance: €{old_balance:.2f} → €{new_balance:.2f})")
-                        
-                        rewards_processed += 1
-                        total_amount_credited += daily_reward
-                    else:
-                        # Transaction already exists (duplicate prevented)
-                        logger.info(f"⏭️  SCHEDULER: Reward already exists for child {child_id} on {target_date} for contract {contract_id} - skipping (prevented duplicate)")
+                    if existing_transactions:
+                        if len(existing_transactions) > 1:
+                            logger.warning(f"⚠️  SCHEDULER: Found {len(existing_transactions)} duplicate reward transactions for child {child_id} on {target_date} for contract {contract_id}")
+                        logger.info(f"⏭️  SCHEDULER: Reward already exists for child {child_id} on {target_date} for contract {contract_id} - skipping")
                         rewards_skipped += 1
+                        continue
+                    
+                    # Create the transaction
+                    old_balance = wallet.balance
+                    wallet.balance += daily_reward
+                    new_balance = wallet.balance
+                    
+                    transaction = WalletTransaction(
+                        child_id=child_id,
+                        amount=daily_reward,
+                        reason="Récompense journalière",
+                        contract_id=contract_id,
+                        date_only=target_date  # Set the date_only field if it exists
+                    )
+                    session.add(transaction)
+                    
+                    logger.info(f"💰 SCHEDULER: Credited €{daily_reward} to child {child_id} for contract {contract_id} (balance: €{old_balance:.2f} → €{new_balance:.2f})")
+                    
+                    rewards_processed += 1
+                    total_amount_credited += daily_reward
                         
-                except IntegrityError as e:
-                    # Fallback in case the constraint doesn't exist yet
-                    logger.warning(f"⚠️  SCHEDULER: Integrity error (likely duplicate) for child {child_id} on {target_date} - skipping: {e}")
+                except Exception as e:
+                    # Handle any database errors gracefully
+                    logger.warning(f"⚠️  SCHEDULER: Error processing reward for child {child_id} on {target_date} - skipping: {e}")
                     rewards_skipped += 1
-                    await session.rollback()
                     continue
 
             await session.commit()
