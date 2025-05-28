@@ -1,13 +1,13 @@
 import React from 'react';
-import { AppBar, Toolbar, Typography, Button, Avatar, Box, IconButton, Menu, MenuItem, useTheme, useMediaQuery } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, Avatar, Box, IconButton, Menu, MenuItem, useTheme, useMediaQuery, Chip } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePin } from '../../contexts/PinContext';
-import { AccountCircle, ExitToApp, Menu as MenuIcon } from '@mui/icons-material';
+import { AccountCircle, ExitToApp, Menu as MenuIcon, Person } from '@mui/icons-material';
 
 const Header: React.FC = () => {
   const { authState, logout, getEffectiveCurrentUser } = useAuth();
-  const { logoutPin } = usePin();
+  const { logoutPin, pinAuthState } = usePin();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -16,15 +16,25 @@ const Header: React.FC = () => {
 
   // Get the effective current user (considering PIN authentication)
   const effectiveUser = getEffectiveCurrentUser();
+  const realUser = authState.currentUser;
+
+  // Check if we're in child emulation mode
+  const isChildEmulation = pinAuthState.isTabletMode && 
+                          pinAuthState.isPinAuthenticated && 
+                          effectiveUser && 
+                          realUser && 
+                          effectiveUser.id !== realUser.id;
 
   // Debug logging for effective user changes
   React.useEffect(() => {
-    console.log('Header: Effective user changed:', {
+    console.log('Header: User state changed:', {
+      realUser: realUser?.name,
       effectiveUser: effectiveUser?.name,
-      isParent: effectiveUser?.isParent,
-      userId: effectiveUser?.id
+      isChildEmulation,
+      effectiveUserIsParent: effectiveUser?.isParent,
+      realUserIsParent: realUser?.isParent
     });
-  }, [effectiveUser]);
+  }, [effectiveUser, realUser, isChildEmulation]);
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -81,7 +91,23 @@ const Header: React.FC = () => {
         </Typography>
         
         {authState.isAuthenticated ? (
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Child emulation indicator */}
+            {isChildEmulation && (
+              <Chip
+                icon={<Person />}
+                label={`Mode: ${effectiveUser?.name}`}
+                size="small"
+                color="secondary"
+                variant="outlined"
+                sx={{ 
+                  color: 'white',
+                  borderColor: 'rgba(255, 255, 255, 0.5)',
+                  '& .MuiChip-icon': { color: 'white' }
+                }}
+              />
+            )}
+            
             {isMobile ? (
               <>
                 <IconButton

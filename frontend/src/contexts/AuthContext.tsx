@@ -121,24 +121,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }));
   }, []);
 
-  // Fonction pour obtenir l'utilisateur effectif (Google ou PIN) - memoized
+  // Fonction pour obtenir l'utilisateur effectif (considère l'authentification PIN)
   const getEffectiveCurrentUser = useCallback((): User | null => {
-    // If PIN authentication is active and we have a current PIN profile
-    if (authState.pinAuth?.isPinAuthenticated && authState.pinAuth.currentPinProfile) {
+    // If PIN authenticated in tablet mode, return the child user from family
+    if (authState.pinAuth?.isTabletMode && 
+        authState.pinAuth?.isPinAuthenticated && 
+        authState.pinAuth?.currentPinProfile) {
+      
       const pinProfile = authState.pinAuth.currentPinProfile;
       
-      // Find the corresponding user in the family or current user
-      const allUsers = authState.currentUser ? [authState.currentUser, ...authState.family] : authState.family;
-      const pinUser = allUsers.find(user => user.id === pinProfile.userId);
+      // Find the actual user object from the family based on the PIN profile's userId
+      const childUser = authState.family.find(user => user.id === pinProfile.userId);
       
-      if (pinUser) {
-        return pinUser;
+      if (childUser) {
+        console.log('AuthContext: Using child user from PIN profile:', {
+          childName: childUser.name,
+          childId: childUser.id,
+          isParent: childUser.isParent
+        });
+        return childUser;
+      } else {
+        console.warn('AuthContext: Child user not found in family for PIN profile:', pinProfile);
       }
     }
     
-    // Default to Google authenticated user
+    // Default to the real Google authenticated user
     return authState.currentUser;
-  }, [authState.pinAuth, authState.currentUser, authState.family]);
+  }, [authState.currentUser, authState.family, authState.pinAuth]);
 
   // Valeur du contexte
   const value = {
