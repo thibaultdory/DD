@@ -93,6 +93,7 @@ const Header: React.FC = () => {
                     <>
                       <MenuItem onClick={() => handleNavigation('/contracts')}>Contrats</MenuItem>
                       <MenuItem onClick={() => handleNavigation('/rules')}>Règles</MenuItem>
+                      <MenuItem onClick={() => handleNavigation('/wallet')}>Portefeuilles</MenuItem>
                     </>
                   )}
                   <MenuItem onClick={handleProfile}>Profil</MenuItem>
@@ -136,6 +137,13 @@ const Header: React.FC = () => {
                       sx={{ whiteSpace: 'nowrap' }}
                     >
                       Règles
+                    </Button>
+                    <Button 
+                      color="inherit" 
+                      onClick={() => navigate('/wallet')}
+                      sx={{ whiteSpace: 'nowrap' }}
+                    >
+                      Portefeuilles
                     </Button>
                   </>
                 )}

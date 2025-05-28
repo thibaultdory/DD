@@ -5,8 +5,9 @@ from uuid import UUID
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_parent
 from app.models.wallet import Wallet, WalletTransaction
-from app.schemas import ConvertRequest
-from datetime import datetime
+from app.schemas import ConvertRequest, ReprocessRequest
+from app.core.jobs import process_daily_rewards_for_date
+from datetime import datetime, date, timedelta
 import logging
 
 router = APIRouter()
@@ -106,3 +107,73 @@ async def convert_wallet(child_id: UUID, req: ConvertRequest, parent=Depends(req
         logger.error(f"Failed to convert amount {amount} for child {child_id}: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process conversion")
+
+@router.post("/admin/reprocess-rewards")
+async def reprocess_rewards(
+    req: ReprocessRequest,
+    parent=Depends(require_parent),
+    db: AsyncSession = Depends(get_db)
+):
+    """Reprocess daily rewards for a date range (admin/parent only)."""
+    start_date = req.startDate
+    end_date = req.endDate
+    
+    # Validate date range
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Start date must be before or equal to end date"
+        )
+    
+    # Limit to reasonable date range (e.g., max 30 days)
+    if (end_date - start_date).days > 30:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Date range cannot exceed 30 days"
+        )
+    
+    # Don't allow future dates
+    today = date.today()
+    if start_date > today or end_date > today:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reprocess rewards for future dates"
+        )
+    
+    logger.info(f"🔄 ADMIN: Parent {parent.id} requested reprocessing rewards from {start_date} to {end_date}")
+    
+    try:
+        results = []
+        current_date = start_date
+        
+        while current_date <= end_date:
+            logger.info(f"🔄 ADMIN: Reprocessing rewards for {current_date}")
+            result = await process_daily_rewards_for_date(current_date)
+            results.append(result)
+            current_date += timedelta(days=1)
+        
+        # Calculate totals
+        total_processed = sum(r["rewards_processed"] for r in results)
+        total_skipped = sum(r["rewards_skipped"] for r in results)
+        total_amount = sum(r["total_amount_credited"] for r in results)
+        
+        logger.info(f"✅ ADMIN: Reprocessing completed. Total: {total_processed} processed, {total_skipped} skipped, €{total_amount:.2f} credited")
+        
+        return {
+            "success": True,
+            "message": f"Reprocessed rewards from {start_date} to {end_date}",
+            "summary": {
+                "total_rewards_processed": total_processed,
+                "total_rewards_skipped": total_skipped,
+                "total_amount_credited": total_amount,
+                "days_processed": len(results)
+            },
+            "daily_results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"💥 ADMIN: Error during reward reprocessing: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reprocess rewards"
+        )

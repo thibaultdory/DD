@@ -75,3 +75,7 @@ class ContractUpdate(BaseModel):
 
 class ConvertRequest(BaseModel):
     amount: float
+
+class ReprocessRequest(BaseModel):
+    startDate: date
+    endDate: date

@@ -18,18 +18,25 @@ import {
   DialogActions,
   TextField,
   Avatar,
-  Tooltip,
   Alert,
-
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  CircularProgress,
+  Chip,
 } from '@mui/material';
 import { 
   AccountBalance, 
   TrendingUp, 
   TrendingDown, 
   Euro,
-  Receipt
+  Receipt,
+  ExpandMore,
+  AdminPanelSettings,
+  Refresh,
+  DateRange,
 } from '@mui/icons-material';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, subDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useAuth } from '../contexts/AuthContext';
 import { Wallet, WalletTransaction } from '../types';
@@ -46,6 +53,13 @@ const WalletPage: React.FC = () => {
   const [openConvertDialog, setOpenConvertDialog] = useState(false);
   const [convertAmount, setConvertAmount] = useState<number>(0);
   const [convertError, setConvertError] = useState<string | null>(null);
+  
+  // Admin reprocess states
+  const [reprocessStartDate, setReprocessStartDate] = useState<string>('');
+  const [reprocessEndDate, setReprocessEndDate] = useState<string>('');
+  const [reprocessLoading, setReprocessLoading] = useState(false);
+  const [reprocessError, setReprocessError] = useState<string | null>(null);
+  const [reprocessSuccess, setReprocessSuccess] = useState<string | null>(null);
 
   // Récupérer les enfants de la famille
   const children = authState.family.filter(user => !user.isParent);
@@ -56,6 +70,16 @@ const WalletPage: React.FC = () => {
       setSelectedChild(children[0].id);
     }
   }, [authState.currentUser, children, selectedChild]);
+
+  useEffect(() => {
+    // Initialize default dates for reprocessing (last 2 days)
+    const today = new Date();
+    const twoDaysAgo = subDays(today, 2);
+    const yesterday = subDays(today, 1);
+    
+    setReprocessStartDate(format(twoDaysAgo, 'yyyy-MM-dd'));
+    setReprocessEndDate(format(yesterday, 'yyyy-MM-dd'));
+  }, []);
 
   useEffect(() => {
     const fetchWalletData = async () => {
@@ -148,6 +172,43 @@ const WalletPage: React.FC = () => {
     }
   };
 
+  const handleReprocessRewards = async () => {
+    try {
+      setReprocessLoading(true);
+      setReprocessError(null);
+      setReprocessSuccess(null);
+
+      if (!reprocessStartDate || !reprocessEndDate) {
+        setReprocessError('Veuillez sélectionner les dates de début et de fin');
+        return;
+      }
+
+      if (new Date(reprocessStartDate) > new Date(reprocessEndDate)) {
+        setReprocessError('La date de début doit être antérieure à la date de fin');
+        return;
+      }
+
+      const result = await walletService.reprocessRewards(reprocessStartDate, reprocessEndDate);
+      
+      if (result.success) {
+        setReprocessSuccess(
+          `Retraitement terminé avec succès ! ` +
+          `${result.summary.total_rewards_processed} récompenses traitées, ` +
+          `${result.summary.total_rewards_skipped} ignorées, ` +
+          `€${result.summary.total_amount_credited.toFixed(2)} crédités au total.`
+        );
+      }
+    } catch (error: any) {
+      console.error('Error reprocessing rewards:', error);
+      setReprocessError(
+        error.response?.data?.detail || 
+        'Une erreur est survenue lors du retraitement des récompenses'
+      );
+    } finally {
+      setReprocessLoading(false);
+    }
+  };
+
   // Fonction pour obtenir le nom de l'utilisateur à partir de son ID
   const getUserName = (userId: string): string => {
     const user = authState.family.find(u => u.id === userId);
@@ -183,40 +244,155 @@ const WalletPage: React.FC = () => {
     <Layout>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" gutterBottom>
-          {authState.currentUser?.isParent ? 'Portefeuille' : 'Mon portefeuille'}
+          {authState.currentUser?.isParent ? 'Gestion des Portefeuilles' : 'Mon portefeuille'}
         </Typography>
-        {!authState.currentUser?.isParent && (
+        {authState.currentUser?.isParent ? (
+          <Typography variant="subtitle1">
+            Gérez les portefeuilles de vos enfants et retraitez les récompenses
+          </Typography>
+        ) : (
           <Typography variant="subtitle1">
             Suivez vos gains et vos dépenses
           </Typography>
         )}
       </Box>
 
+      {/* Admin section for parents */}
+      {authState.currentUser?.isParent && (
+        <Accordion sx={{ mb: 4 }}>
+          <AccordionSummary expandIcon={<ExpandMore />}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <AdminPanelSettings sx={{ mr: 1 }} />
+              <Typography variant="h6">Administration - Retraitement des récompenses</Typography>
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Utilisez cette fonction pour retraiter les récompenses journalières pour une période donnée. 
+                Cela peut être utile si des récompenses n'ont pas été correctement calculées.
+              </Typography>
+              
+              <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+                <TextField
+                  label="Date de début"
+                  type="date"
+                  value={reprocessStartDate}
+                  onChange={(e) => setReprocessStartDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  size="small"
+                />
+                <TextField
+                  label="Date de fin"
+                  type="date"
+                  value={reprocessEndDate}
+                  onChange={(e) => setReprocessEndDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  size="small"
+                />
+                <Button
+                  variant="contained"
+                  startIcon={reprocessLoading ? <CircularProgress size={20} /> : <Refresh />}
+                  onClick={handleReprocessRewards}
+                  disabled={reprocessLoading || !reprocessStartDate || !reprocessEndDate}
+                >
+                  {reprocessLoading ? 'Traitement...' : 'Retraiter les récompenses'}
+                </Button>
+              </Box>
+
+              {reprocessError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {reprocessError}
+                </Alert>
+              )}
+
+              {reprocessSuccess && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  {reprocessSuccess}
+                </Alert>
+              )}
+
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Chip
+                  icon={<DateRange />}
+                  label="Derniers 2 jours"
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    const today = new Date();
+                    const twoDaysAgo = subDays(today, 2);
+                    const yesterday = subDays(today, 1);
+                    setReprocessStartDate(format(twoDaysAgo, 'yyyy-MM-dd'));
+                    setReprocessEndDate(format(yesterday, 'yyyy-MM-dd'));
+                  }}
+                />
+                <Chip
+                  icon={<DateRange />}
+                  label="Dernière semaine"
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    const today = new Date();
+                    const weekAgo = subDays(today, 7);
+                    const yesterday = subDays(today, 1);
+                    setReprocessStartDate(format(weekAgo, 'yyyy-MM-dd'));
+                    setReprocessEndDate(format(yesterday, 'yyyy-MM-dd'));
+                  }}
+                />
+              </Box>
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+      )}
+
       {/* Sélecteur d'enfant pour les parents */}
       {authState.currentUser?.isParent && children.length > 0 && (
-        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
-          <Typography variant="subtitle1" sx={{ mr: 2 }}>
-            Afficher le portefeuille de :
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            {children.map(child => (
-              <Tooltip key={child.id} title={child.name}>
-                <Avatar
-                  src={child.profilePicture}
-                  alt={child.name}
-                  sx={{ 
-                    width: 40, 
-                    height: 40, 
+        <Card sx={{ mb: 4, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200' }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" sx={{ mr: 2 }}>
+                Sélectionner l'enfant :
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              {children.map(child => (
+                <Box
+                  key={child.id}
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
                     cursor: 'pointer',
-                    border: selectedChild === child.id ? '2px solid #1976d2' : 'none',
-                    opacity: selectedChild === child.id ? 1 : 0.6
+                    p: 2,
+                    borderRadius: 2,
+                    border: '2px solid',
+                    borderColor: selectedChild === child.id ? 'primary.main' : 'grey.300',
+                    bgcolor: selectedChild === child.id ? 'primary.50' : 'background.paper',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      bgcolor: 'primary.50',
+                    }
                   }}
                   onClick={() => handleChildSelect(child.id)}
-                />
-              </Tooltip>
-            ))}
-          </Box>
-        </Box>
+                >
+                  <Avatar
+                    src={child.profilePicture}
+                    alt={child.name}
+                    sx={{ 
+                      width: 48, 
+                      height: 48, 
+                      mb: 1
+                    }}
+                  />
+                  <Typography variant="body2" fontWeight={selectedChild === child.id ? 'bold' : 'normal'}>
+                    {child.name}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {wallet && (
