@@ -123,12 +123,16 @@ async def process_daily_rewards_for_date(target_date: date = None):
                     wallet.balance += daily_reward
                     new_balance = wallet.balance
                     
+                    # Set transaction date to the target date instead of current time
+                    transaction_datetime = datetime.combine(target_date, datetime.min.time())
+                    
                     transaction = WalletTransaction(
                         child_id=child_id,
                         amount=daily_reward,
                         reason="Récompense journalière",
                         contract_id=contract_id,
-                        date_only=target_date  # Set the date_only field if it exists
+                        date=transaction_datetime,  # Use target date instead of current date
+                        date_only=target_date
                     )
                     session.add(transaction)
                     
