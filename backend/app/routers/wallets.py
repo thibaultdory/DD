@@ -87,10 +87,14 @@ async def convert_wallet(child_id: UUID, req: ConvertRequest, parent=Depends(req
     try:
         logger.info(f"Converting {amount} from wallet {child_id}")
         wallet.balance -= amount
+        
+        # Use custom comment if provided, otherwise use default message
+        reason = req.comment if req.comment and req.comment.strip() else "Conversion en euros réels"
+        
         tx = WalletTransaction(
             child_id=child_id,
             amount=-amount,
-            reason="Conversion en euros réels",
+            reason=reason,
             contract_id=None,
             date=datetime.utcnow()
         )
@@ -106,7 +110,7 @@ async def convert_wallet(child_id: UUID, req: ConvertRequest, parent=Depends(req
     except Exception as e:
         logger.error(f"Failed to convert amount {amount} for child {child_id}: {e}", exc_info=True)
         await db.rollback()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process conversion")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to convert amount")
 
 @router.post("/admin/reprocess-rewards")
 async def reprocess_rewards(
