@@ -579,8 +579,8 @@ const Calendar: React.FC = () => {
                       {/* Show fewer buttons in month view to save space */}
                       {calendarView === 'week' && (
                         <>
-                          {/* Edit and Delete buttons for parents who created the task */}
-                          {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                          {/* Edit and Delete buttons for parents */}
+                          {authState.currentUser?.isParent && (
                             <>
                               <Tooltip title="Modifier la tâche">
                                 <IconButton 
@@ -1040,7 +1040,7 @@ const Calendar: React.FC = () => {
                                   </Tooltip>
                                   
                                   {/* Task action buttons */}
-                                  {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                                  {authState.currentUser?.isParent && (
                                     <>
                                       <Tooltip title="Modifier la tâche">
                                         <IconButton 
@@ -1625,7 +1625,7 @@ const Calendar: React.FC = () => {
           {selectedItemType === 'task' && selectedItem && (
             <>
               {/* Edit and Delete buttons for parents who created the task */}
-              {authState.currentUser?.isParent && selectedItem.createdBy === authState.currentUser.id && (
+              {authState.currentUser?.isParent && (
                 <>
                   <Button 
                     onClick={() => {
@@ -1707,7 +1707,7 @@ const Calendar: React.FC = () => {
                             control={<Radio />}
                             label={
                               taskToDelete.parentTaskId
-                                ? "Supprimer toute la série de tâches récurrentes"
+                                ? "Supprimer cette occurrence et toutes les occurrences futures"
                                 : "Supprimer cette tâche et toutes les occurrences futures"
                             }
                           />

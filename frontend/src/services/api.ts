@@ -199,6 +199,20 @@ export const taskService = {
     return response.data;
   },
 
+  // Récupérer une seule tâche par ID
+  async getTask(taskId: string): Promise<Task> {
+    if (USE_MOCK_DATA) {
+      const task = mockTasks.find(t => t.id === taskId);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      return task;
+    }
+
+    const response = await api.get(`/tasks/id/${taskId}`);
+    return response.data;
+  },
+
   // Récupérer les tâches d'un utilisateur spécifique avec pagination
   async getUserTasks(userId: string, page: number = 1, limit: number = 10): Promise<{ tasks: Task[], total: number }> {
     if (USE_MOCK_DATA) {

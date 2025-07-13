@@ -8,7 +8,8 @@ from app.models.user import User
 from app.schemas import TaskCreate, TaskUpdate
 from datetime import date
 from uuid import UUID
-import logging # Import logging
+import logging  # Import logging
+from typing import List
 
 router = APIRouter()
 logger = logging.getLogger(__name__) # Add logger instance
@@ -34,6 +35,39 @@ async def serialize_task(task: Task, db: AsyncSession):
         "endDate": task.end_date.isoformat() if task.end_date else None,
         "parentTaskId": str(task.parent_task_id) if task.parent_task_id else None,
     }
+
+# ---------------------------------------------------------------------------
+# NEW ENDPOINT: Get a single task by id
+# ---------------------------------------------------------------------------
+
+@router.get("/tasks/id/{task_id}")
+async def get_task(
+    task_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a single task, including `canModify` flag for the frontend."""
+    task = await db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    task_data = await serialize_task(task, db)
+
+    # Permissions flag
+    if current_user.is_parent:
+        task_data["canModify"] = True
+    else:
+        # user is child – can modify only if assigned
+        result = await db.execute(
+            select(task_assignments).where(
+                task_assignments.c.task_id == task.id,
+                task_assignments.c.user_id == current_user.id,
+            )
+        )
+        is_assigned = result.first() is not None
+        task_data["canModify"] = is_assigned
+
+    return task_data
 
 @router.get("/tasks")
 async def get_tasks(
@@ -191,19 +225,14 @@ async def update_task(task_id: UUID, updates: TaskUpdate, current_user: User = D
         data = updates.dict(exclude_unset=True)
         logger.info(f"Updating task {task_id} with data: {data}")
 
-        # Check permissions based on user type and update content
+        # ---------------------------------------------------------------
+        # PERMISSIONS
+        # ---------------------------------------------------------------
+        # Parents can update any field on any task.
+        # (Children are still restricted below.)
         if current_user.is_parent:
-            # Parents can always change completion status of any task
-            # For other modifications, they can only update tasks they created
-            if "completed" in data and len(data) == 1:
-                # Only updating completion status - allow for any parent
-                logger.debug(f"Parent {current_user.id} updating completion status for task {task_id}")
-            elif task.created_by != current_user.id:
-                # Trying to update other fields on a task they didn't create
-                logger.warning(f"Unauthorized update attempt on task {task_id} by parent {current_user.id} - can only modify tasks they created")
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this task")
+            pass  # No additional checks
         else:
-            # Children can only uncomplete tasks they're assigned to
             # Check if user is assigned to task
             result = await db.execute(
                 select(task_assignments).where(
@@ -225,9 +254,14 @@ async def update_task(task_id: UUID, updates: TaskUpdate, current_user: User = D
                     detail="Children can only uncomplete tasks (set completed to false)"
                 )
 
-        # Si c'est une instance d'une tâche récurrente, on ne peut modifier que completed
-        if task.parent_task_id and len(data) > 1 or (len(data) == 1 and "completed" not in data):
-            logger.warning(f"Attempt to update restricted fields on recurring task instance {task_id}")
+        # Si utilisateur est enfant, restriction déjà gérée ci-dessus.
+        # Les parents peuvent modifier entièrement une instance récurrente.
+        if (not current_user.is_parent) and (
+            task.parent_task_id and (len(data) > 1 or (len(data) == 1 and "completed" not in data))
+        ):
+            logger.warning(
+                f"Attempt by child to update restricted fields on recurring task instance {task_id}"
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Only the completion status can be updated for recurring task instances"
@@ -276,8 +310,67 @@ async def update_task(task_id: UUID, updates: TaskUpdate, current_user: User = D
                 )
                 logger.debug(f"Assigned user {uid} to task {task.id}")
 
-        # Si nécessaire, mettre à jour les instances futures de la tâche récurrente
-        if update_future_instances:
+        # ---------------------------------------------------------------
+        # Si nécessaire, mettre à jour/REGÉNÉRER les instances futures
+        # ---------------------------------------------------------------
+
+        # 1) End date / weekdays change requires full regeneration of instances
+        regenerate_instances = False
+        if is_recurring_parent and any(k in data for k in ["endDate", "weekdays"]):
+            regenerate_instances = True
+
+        if regenerate_instances:
+            from datetime import timedelta
+
+            logger.info(f"Regenerating instances for recurring task {task_id} due to pattern change")
+
+            # Update parent task fields
+            if "endDate" in data:
+                task.end_date = data["endDate"]
+            if "weekdays" in data:
+                task.weekdays = data["weekdays"]
+
+            # Delete ALL existing instances (children of this parent)
+            result = await db.execute(select(Task).where(Task.parent_task_id == task_id))
+            existing_instances = result.scalars().all()
+            for inst in existing_instances:
+                await db.delete(inst)
+
+            # Determine assignments for this parent (should be single child, but keep generic)
+            result_assign = await db.execute(
+                select(task_assignments.c.user_id).where(task_assignments.c.task_id == task.id)
+            )
+            assigned_user_ids = [row[0] for row in result_assign.all()]
+
+            weekdays: List[int] = task.weekdays or []
+            end_date = task.end_date or task.due_date
+
+            current = task.due_date + timedelta(days=1)
+            one_day = timedelta(days=1)
+
+            while current <= end_date:
+                if current.isoweekday() in weekdays:
+                    new_instance = Task(
+                        title=task.title,
+                        description=task.description,
+                        due_date=current,
+                        created_by=task.created_by,
+                        parent_task_id=task.id,
+                        is_recurring=False,
+                    )
+                    db.add(new_instance)
+                    await db.flush()
+
+                    # Assign to same users
+                    for uid in assigned_user_ids:
+                        await db.execute(
+                            task_assignments.insert().values(task_id=new_instance.id, user_id=uid)
+                        )
+
+                current += one_day
+
+        # 2) Otherwise, update selected fields on future instances (existing behaviour)
+        if update_future_instances and not regenerate_instances:
             today = date.today()
             logger.info(f"Updating future instances of recurring task {task_id}")
             # Récupérer toutes les instances futures
@@ -363,9 +456,7 @@ async def delete_task(
     if not task:
         logger.warning(f"Delete attempt on non-existent task: {task_id}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    if task.created_by != parent.id:
-        logger.warning(f"Unauthorized delete attempt on task {task_id} by user {parent.id}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this task")
+    # All parents can delete any task
 
     try:
         logger.info(f"Deleting task {task_id} (delete_future={delete_future})")
@@ -373,25 +464,31 @@ async def delete_task(
         # Si c'est une instance d'une tâche récurrente
         if task.parent_task_id:
             if delete_future:
-                # L'utilisateur veut supprimer toute la série
-                logger.info(f"Deleting entire series for recurring task instance {task_id}")
-                parent_task_id = task.parent_task_id
-                
-                # Supprimer toutes les instances de la tâche récurrente (y compris celle-ci)
-                result = await db.execute(
-                    select(Task).where(Task.parent_task_id == parent_task_id)
+                # Supprimer cette occurrence et toutes les futures (pas les passées)
+                logger.info(
+                    f"Deleting recurring task instance {task_id} and future occurrences"
                 )
-                all_instances = result.scalars().all()
-                logger.debug(f"Found {len(all_instances)} instances to delete.")
-                for instance in all_instances:
+
+                parent_task_id = task.parent_task_id
+                selected_date = task.due_date
+
+                # Supprimer les instances courantes et futures
+                result = await db.execute(
+                    select(Task).where(
+                        Task.parent_task_id == parent_task_id,
+                        Task.due_date >= selected_date,
+                    )
+                )
+                future_instances = result.scalars().all()
+                logger.debug(f"Found {len(future_instances)} instances to delete.")
+                for instance in future_instances:
                     logger.debug(f"Deleting instance {instance.id}")
                     await db.delete(instance)
-                
-                # Supprimer aussi la tâche parente
+
+                # Mettre à jour la date de fin de la tâche parente si nécessaire
                 parent_task = await db.get(Task, parent_task_id)
-                if parent_task:
-                    logger.debug(f"Deleting parent task {parent_task_id}")
-                    await db.delete(parent_task)
+                if parent_task and parent_task.end_date and parent_task.end_date >= selected_date:
+                    parent_task.end_date = selected_date - timedelta(days=1)
             else:
                 # Supprimer uniquement cette instance
                 logger.debug(f"Deleting single recurring task instance {task_id}")
