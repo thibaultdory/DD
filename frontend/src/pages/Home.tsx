@@ -1001,7 +1001,7 @@ const Home: React.FC = () => {
                               secondaryAction={
                                 <Box sx={{ display: 'flex', gap: 0.5 }}>
                                   {/* Task action buttons */}
-                                  {authState.currentUser?.isParent && task.createdBy === authState.currentUser.id && (
+                                  {authState.currentUser?.isParent && (
                                     <>
                                       <Tooltip title="Modifier la tâche">
                                         <IconButton
@@ -1232,7 +1232,7 @@ const Home: React.FC = () => {
                             control={<Radio />}
                             label={
                               taskToDelete.parentTaskId
-                                ? "Supprimer toute la série de tâches récurrentes"
+                                ? "Supprimer cette occurrence et toutes les occurrences futures"
                                 : "Supprimer cette tâche et toutes les occurrences futures"
                             }
                           />

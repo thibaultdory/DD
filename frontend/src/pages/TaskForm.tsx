@@ -35,6 +35,8 @@ const TaskForm: React.FC = () => {
   const { authState } = useAuth();
   const navigate = useNavigate();
   const { taskId } = useParams<{ taskId: string }>();
+  // Nous pourrons réassigner la cible d'édition si la tâche est une occurrence récurrente
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const isEditing = !!taskId;
 
   const [title, setTitle] = useState('');
@@ -59,21 +61,35 @@ const TaskForm: React.FC = () => {
       if (isEditing && taskId) {
         try {
           setLoading(true);
-          const tasksResponse = await taskService.getTasks();
-          const tasksList = Array.isArray(tasksResponse) ? tasksResponse : (tasksResponse.tasks || []);
-          const task = tasksList.find((t: any) => t.id === taskId);
-          
+          const task = await taskService.getTask(taskId);
           if (task) {
-            setTitle(task.title);
-            setDescription(task.description || '');
-            setDueDate(new Date(task.dueDate));
-            setAssignedTo(task.assignedTo);
-            setIsRecurring(task.isRecurring);
-            setWeekdays(task.weekdays || []);
-            if (task.endDate) {
-              setEndDate(new Date(task.endDate));
+            // Si c'est une occurrence d'une tâche récurrente, récupérer la tâche parente
+            let baseTask = task;
+            if (task.parentTaskId) {
+              try {
+                const parentTask = await taskService.getTask(task.parentTaskId);
+                baseTask = parentTask;
+                setEditingTargetId(parentTask.id);
+              } catch (err) {
+                console.error("Unable to fetch parent task", err);
+              }
+            } else {
+              setEditingTargetId(task.id);
+            }
+
+            // Utiliser baseTask (parente ou elle-même) pour préremplir les champs de récurrence
+            setIsRecurring(baseTask.isRecurring);
+            setWeekdays(baseTask.weekdays || []);
+            if (baseTask.endDate) {
+              setEndDate(new Date(baseTask.endDate));
               setEndDateMode('specific');
             }
+
+            setTitle(task.title);
+            setDescription(task.description || '');
+            setDueDate(new Date(baseTask.dueDate));
+            setAssignedTo(task.assignedTo);
+            // Si la tâche d'origine n'est pas récurrente mais la parente l'est, les champs ci-dessus sont déjà remplis
           } else {
             setError('Tâche non trouvée');
           }
@@ -145,8 +161,10 @@ const TaskForm: React.FC = () => {
       const formattedDueDate = format(dueDate, 'yyyy-MM-dd');
       const formattedEndDate = endDate && isRecurring ? format(endDate, 'yyyy-MM-dd') : undefined;
       
-      if (isEditing && taskId) {
-        await taskService.updateTask(taskId, {
+      const targetId = editingTargetId || taskId;
+
+      if (isEditing && targetId) {
+        await taskService.updateTask(targetId, {
           title,
           description,
           dueDate: formattedDueDate,
