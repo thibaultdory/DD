@@ -803,7 +803,7 @@ export const walletService = {
   },
 
   // Convertir des euros virtuels en euros réels (parents uniquement)
-  async convertToRealMoney(childId: string, amount: number): Promise<Wallet> {
+  async convertToRealMoney(childId: string, amount: number, comment?: string): Promise<Wallet> {
     if (USE_MOCK_DATA) {
       const walletIndex = mockWallets.findIndex(w => w.childId === childId);
       if (walletIndex === -1) {
@@ -821,7 +821,7 @@ export const walletService = {
         childId,
         amount: -amount,
         date: new Date().toISOString().split('T')[0],
-        reason: 'Conversion en argent réel'
+        reason: comment && comment.trim() ? comment : 'Conversion en argent réel'
       };
       
       mockWalletTransactions.push(newTransaction);

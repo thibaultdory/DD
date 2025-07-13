@@ -53,6 +53,7 @@ const WalletPage: React.FC = () => {
   const [openConvertDialog, setOpenConvertDialog] = useState(false);
   const [convertAmount, setConvertAmount] = useState<number>(0);
   const [convertError, setConvertError] = useState<string | null>(null);
+  const [convertComment, setConvertComment] = useState<string>('');
   
   // Admin reprocess states
   const [reprocessStartDate, setReprocessStartDate] = useState<string>('');
@@ -138,6 +139,7 @@ const WalletPage: React.FC = () => {
     setOpenConvertDialog(true);
     setConvertAmount(0);
     setConvertError(null);
+    setConvertComment('');
   };
 
   const handleCloseConvertDialog = () => {
@@ -146,6 +148,10 @@ const WalletPage: React.FC = () => {
 
   const handleConvertAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setConvertAmount(parseFloat(e.target.value));
+  };
+
+  const handleConvertCommentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setConvertComment(e.target.value);
   };
 
   const handleConvertToRealMoney = async () => {
@@ -164,7 +170,7 @@ const WalletPage: React.FC = () => {
         return;
       }
       
-      await walletService.convertToRealMoney(childId, convertAmount);
+      await walletService.convertToRealMoney(childId, convertAmount, convertComment);
       handleCloseConvertDialog();
     } catch (error) {
       console.error('Error converting to real money:', error);
@@ -408,7 +414,7 @@ const WalletPage: React.FC = () => {
               <Typography variant="h3" color="primary" sx={{ mb: 2 }}>
                 {wallet.balance.toFixed(2)} €
               </Typography>
-              {authState.currentUser?.isParent ? (
+              {authState.currentUser?.isParent && (
                 <Button 
                   variant="contained" 
                   color="primary"
@@ -417,14 +423,6 @@ const WalletPage: React.FC = () => {
                   disabled={!selectedChild}
                 >
                   Convertir en euros réels
-                </Button>
-              ) : (
-                <Button 
-                  variant="contained" 
-                  color="primary"
-                  onClick={handleOpenConvertDialog}
-                >
-                  Convertir en argent réel
                 </Button>
               )}
             </CardContent>
@@ -488,7 +486,7 @@ const WalletPage: React.FC = () => {
 
           {/* Dialogue de conversion en argent réel */}
           <Dialog open={openConvertDialog} onClose={handleCloseConvertDialog}>
-            <DialogTitle>Convertir en {authState.currentUser?.isParent ? 'euros réels' : 'argent réel'}</DialogTitle>
+            <DialogTitle>Convertir en euros réels</DialogTitle>
             <DialogContent>
               <Typography variant="body1" paragraph>
                 Solde actuel: {wallet.balance.toFixed(2)} €
@@ -506,12 +504,20 @@ const WalletPage: React.FC = () => {
                 inputProps={{ min: 0, max: wallet.balance, step: 0.1 }}
                 error={!!convertError}
                 helperText={convertError}
+                sx={{ mb: 2 }}
               />
-              {!authState.currentUser?.isParent && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                  Cette action demandera à un parent de vous donner l'équivalent en argent réel.
-                </Typography>
-              )}
+              <TextField
+                margin="dense"
+                id="comment"
+                label="Commentaire (optionnel)"
+                type="text"
+                fullWidth
+                variant="outlined"
+                value={convertComment}
+                onChange={handleConvertCommentChange}
+                placeholder="ex: Achat jouet, argent de poche..."
+                helperText="Si laissé vide, utilisera 'Conversion en euros réels'"
+              />
             </DialogContent>
             <DialogActions>
               <Button onClick={handleCloseConvertDialog}>Annuler</Button>
