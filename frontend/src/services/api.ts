@@ -835,6 +835,8 @@ export const walletService = {
     }
     
     const response = await api.post(`/wallets/${childId}/convert`, { amount });
+    // Notify listeners so subscribed components (e.g., Wallet page) refresh automatically
+    notifyChange('wallets');
     return response.data;
   },
 
