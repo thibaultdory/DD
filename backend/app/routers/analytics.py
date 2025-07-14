@@ -143,6 +143,10 @@ async def get_monthly_analytics(
         child_id = current_user.id
 
     end = start + relativedelta(months=1) - timedelta(days=1)
+    # If requesting current month, limit the end date to today to avoid future days skewing stats
+    if start.year == today.year and start.month == today.month:
+        if today < end:
+            end = today
     prev_start = start - relativedelta(months=1)
     prev_end = start - timedelta(days=1)
 
