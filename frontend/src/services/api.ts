@@ -7,7 +7,8 @@ import {
   Contract, 
   Wallet, 
   WalletTransaction,
-  Rule
+  Rule,
+  AnalyticsResponse
 } from '../types';
 import { 
   mockUsers, 
@@ -906,4 +907,28 @@ export const walletService = {
     notifyChange('wallets');
     return response.data;
   }
+};
+
+// ---------------------------------------------------------------------------
+// Analytics Service
+// ---------------------------------------------------------------------------
+export const analyticsService = {
+  async getMonthlyAnalytics(month?: string, childId?: string) {
+    if (USE_MOCK_DATA) {
+      // Return dummy data for development
+      return {
+        perfectDays: { current: 20, previous: 15 },
+        longestStreak: { current: 5, previous: 4 },
+        taskCompletionRate: { current: 92, previous: 88 },
+        infractions: { current: 3, previous: 6 },
+        privilegesEarned: { current: 8, previous: 7 },
+        rewardsEarned: { current: 30, previous: 25 },
+      } as AnalyticsResponse;
+    }
+
+    const response = await api.get('/analytics/monthly', {
+      params: { month, child_id: childId },
+    });
+    return response.data as AnalyticsResponse;
+  },
 };

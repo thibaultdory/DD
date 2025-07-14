@@ -20,17 +20,8 @@ class WalletTransaction(Base):
     date = Column(DateTime, default=datetime.utcnow, nullable=False)
     reason = Column(String, nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=True)
-    date_only = Column(Date, nullable=False, default=func.current_date())
 
     wallet = relationship("Wallet", back_populates="transactions")
     contract = relationship("Contract")
 
-    __table_args__ = (
-        # Create a partial unique index for daily rewards only
-        Index(
-            'uq_daily_reward_per_child_contract_date',
-            'child_id', 'contract_id', 'date_only', 'reason',
-            unique=True,
-            postgresql_where=(reason == 'Récompense journalière')
-        ),
-    )
+    # Note: Unique constraint for daily rewards handled in application logic now

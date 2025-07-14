@@ -90,3 +90,18 @@ export interface AuthState {
   currentUser: User | null;
   family: User[];
 }
+
+// Types pour l'analytics mensuelle
+export interface Comparison {
+  current: number;
+  previous: number;
+}
+
+export interface AnalyticsResponse {
+  perfectDays: Comparison;
+  longestStreak: Comparison;
+  taskCompletionRate: Comparison;
+  infractions: Comparison;
+  privilegesEarned: Comparison;
+  rewardsEarned: Comparison;
+}

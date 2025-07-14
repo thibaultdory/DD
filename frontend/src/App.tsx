@@ -19,6 +19,7 @@ import Profile from './pages/Profile';
 import TaskForm from './pages/TaskForm';
 import PrivilegeForm from './pages/PrivilegeForm';
 import ViolationForm from './pages/ViolationForm';
+import Analytics from './pages/Analytics';
 
 // Theme de l'application
 const theme = createTheme({
@@ -150,6 +151,15 @@ const App: React.FC = () => {
                   element={
                     <ProtectedRoute requireParent>
                       <ViolationForm />
+                    </ProtectedRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/analytics" 
+                  element={
+                    <ProtectedRoute>
+                      <Analytics />
                     </ProtectedRoute>
                   } 
                 />
