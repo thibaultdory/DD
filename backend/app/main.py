@@ -27,6 +27,7 @@ from app.routers.rule_violations import router as rule_violations_router
 from app.routers.contracts import router as contracts_router
 from app.routers.wallets import router as wallets_router
 from datetime import date
+from app.routers.analytics import router as analytics_router
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ app.include_router(privileges_router, prefix="/api", tags=["privileges"])
 app.include_router(rule_violations_router, prefix="/api", tags=["rule-violations"])
 app.include_router(contracts_router, prefix="/api", tags=["contracts"])
 app.include_router(wallets_router, prefix="/api", tags=["wallets"])
+app.include_router(analytics_router, prefix="/api", tags=["analytics"])
 # Rules endpoints
 from app.routers.rules import router as rules_router
 app.include_router(rules_router, prefix="/api", tags=["rules"])

@@ -80,3 +80,15 @@ class ConvertRequest(BaseModel):
 class ReprocessRequest(BaseModel):
     startDate: date
     endDate: date
+
+class Comparison(BaseModel):
+    current: float
+    previous: float
+
+class AnalyticsResponse(BaseModel):
+    perfectDays: Comparison
+    longestStreak: Comparison
+    taskCompletionRate: Comparison  # Percentage 0-100
+    infractions: Comparison
+    privilegesEarned: Comparison
+    rewardsEarned: Comparison

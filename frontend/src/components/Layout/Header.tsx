@@ -89,6 +89,7 @@ const Header: React.FC = () => {
                 >
                   <MenuItem onClick={() => handleNavigation('/')}>Accueil</MenuItem>
                   <MenuItem onClick={() => handleNavigation('/calendar')}>Calendrier</MenuItem>
+                  <MenuItem onClick={() => handleNavigation('/analytics')}>Analytics</MenuItem>
                   {authState.currentUser?.isParent && (
                     <>
                       <MenuItem onClick={() => handleNavigation('/contracts')}>Contrats</MenuItem>
@@ -121,6 +122,13 @@ const Header: React.FC = () => {
                   sx={{ whiteSpace: 'nowrap' }}
                 >
                   Calendrier
+                </Button>
+                <Button 
+                  color="inherit" 
+                  onClick={() => navigate('/analytics')}
+                  sx={{ whiteSpace: 'nowrap' }}
+                >
+                  Analytics
                 </Button>
                 {authState.currentUser?.isParent && (
                   <>

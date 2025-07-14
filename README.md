@@ -25,6 +25,17 @@ L'Assistant de Vie Familiale est une application web concue pour aider les famil
   - Suivi du solde accumule par chaque enfant
   - Historique des transactions
   - Conversion des euros virtuels en euros reels par les parents
+- **Statistiques & Analytique** :
+  - Page d'analytics mensuelle offrant une vue visuelle des réalisations des enfants
+  - Statistiques clés affichées :
+    - **Jours parfaits** : nombre de jours sans infraction avec toutes les tâches terminées (avec variation vs. le mois précédent)
+    - **Plus longue série** : plus longue suite de jours parfaits consécutifs (variation vs. le mois précédent)
+    - **Taux de tâches accomplies** : pourcentage de tâches complétées sur le mois (variation vs. le mois précédent)
+    - **Nombre total d'infractions** : infractions enregistrées sur le mois (variation vs. le mois précédent)
+    - **Privilèges mérités** : privilèges accordés aux enfants (variation vs. le mois précédent)
+    - **Récompenses gagnées** : euros virtuels crédités dans les portefeuilles (variation vs. le mois précédent)
+  - Visualisations interactives (graphes barres / lignes) pour comparer le mois courant au mois précédent
+  - Export possible des graphiques en image ou PDF
 
 ### Exemple de contrat
 
