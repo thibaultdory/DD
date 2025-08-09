@@ -485,7 +485,6 @@ The application uses APScheduler with file-based coordination to prevent duplica
 - **Worker Coordination**: Only one worker across all processes runs the scheduler
 - **Job Types**:
   - **Daily Rewards**: Processes contracts and credits wallets (runs at 00:00)
-  - **Recurring Tasks**: Creates task instances for the next week (runs at 00:00)
 
 ### Troubleshooting
 

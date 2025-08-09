@@ -11,7 +11,6 @@ from app.core.database import init_db
 from app.core.initial_data import seed_initial_data
 from app.core.jobs import process_daily_rewards
 from app.core.logging_config import setup_logging  # Import setup_logging
-from app.scheduler import create_recurring_task_instances
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.executors.asyncio import AsyncIOExecutor
 import os
@@ -162,16 +161,6 @@ async def startup():
             hour=0, 
             minute=0,
             id='daily_rewards',
-            replace_existing=True
-        )
-        
-        logger.info(f"📅 SCHEDULER: Adding recurring tasks job (runs at 00:00)")
-        scheduler.add_job(
-            create_recurring_task_instances, 
-            'cron', 
-            hour=0, 
-            minute=0,
-            id='recurring_tasks',
             replace_existing=True
         )
         
