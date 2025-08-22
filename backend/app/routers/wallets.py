@@ -80,7 +80,8 @@ async def convert_wallet(child_id: UUID, req: ConvertRequest, parent=Depends(req
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Wallet not found")
     
     amount = req.amount
-    if amount <= 0 or amount > wallet.balance:
+    # Allow overdraft: only enforce positive amount
+    if amount <= 0:
         logger.warning(f"Invalid conversion amount requested for child {child_id}: {amount} (Balance: {wallet.balance})")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid amount")
 
