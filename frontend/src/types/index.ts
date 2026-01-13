@@ -63,6 +63,7 @@ export interface Contract {
   parentId: string;
   rules: Rule[];
   dailyReward: number; // Montant en euros
+  infractionCost: number; // Coût appliqué à partir de la 2e infraction du même jour
   startDate: string;
   endDate: string;
   active: boolean;

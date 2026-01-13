@@ -60,6 +60,7 @@ class ContractCreate(BaseModel):
     parentId: UUID
     ruleIds: List[UUID]  # Changed from embedded rules to rule IDs
     dailyReward: float
+    infractionCost: float = 0.0
     startDate: date
     endDate: date
 
@@ -69,6 +70,7 @@ class ContractUpdate(BaseModel):
     parentId: Optional[UUID]
     ruleIds: Optional[List[UUID]]  # Changed from embedded rules to rule IDs
     dailyReward: Optional[float]
+    infractionCost: Optional[float]
     startDate: Optional[date]
     endDate: Optional[date]
     active: Optional[bool]

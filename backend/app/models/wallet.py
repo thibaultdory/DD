@@ -23,6 +23,7 @@ class WalletTransaction(Base):
     date_only = Column(Date, nullable=False)
     reason = Column(String, nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=True)
+    violation_id = Column(UUID(as_uuid=True), nullable=True)
 
     wallet = relationship("Wallet", back_populates="transactions")
     contract = relationship("Contract")

@@ -579,11 +579,14 @@ export const ruleViolationService = {
       };
       mockRuleViolations.push(newViolation);
       notifyChange('violations');
+      notifyChange('wallets');
       return newViolation;
     }
     
     const response = await api.post('/rule-violations', violation);
     notifyChange('violations');
+    // Creating a violation can also create/update wallet transactions (penalties)
+    notifyChange('wallets');
     return response.data;
   },
 
@@ -594,6 +597,7 @@ export const ruleViolationService = {
       if (index !== -1) {
         mockRuleViolations.splice(index, 1);
         notifyChange('violations');
+        notifyChange('wallets');
         return;
       }
       throw new Error('Rule violation not found');
@@ -601,6 +605,8 @@ export const ruleViolationService = {
     
     await api.delete(`/rule-violations/${violationId}`);
     notifyChange('violations');
+    // Deleting a violation can also refund/update wallet transactions (penalties)
+    notifyChange('wallets');
   },
 
   // Récupérer toutes les infractions pour la vue calendrier avec permissions
@@ -633,6 +639,7 @@ interface ContractCreateData {
   parentId: string;
   ruleIds: string[];
   dailyReward: number;
+  infractionCost: number;
   startDate: string;
   endDate: string;
 }
@@ -643,6 +650,7 @@ interface ContractUpdateData {
   parentId?: string;
   ruleIds?: string[];
   dailyReward?: number;
+  infractionCost?: number;
   startDate?: string;
   endDate?: string;
   active?: boolean;
@@ -707,6 +715,7 @@ export const contractService = {
         parentId: contractData.parentId,
         rules: rules,
         dailyReward: contractData.dailyReward,
+        infractionCost: contractData.infractionCost ?? 0,
         startDate: contractData.startDate,
         endDate: contractData.endDate,
         active: true

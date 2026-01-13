@@ -39,6 +39,7 @@ interface ContractFormData {
   parentId: string;
   ruleIds: string[];
   dailyReward: number;
+  infractionCost: number;
   startDate: string;
   endDate: string;
   active: boolean;
@@ -57,6 +58,7 @@ const Contracts: React.FC = () => {
     parentId: '',
     ruleIds: [],
     dailyReward: 1,
+    infractionCost: 0,
     startDate: '',
     endDate: '',
     active: true
@@ -95,6 +97,7 @@ const Contracts: React.FC = () => {
         parentId: contract.parentId,
         ruleIds: contract.rules.map(rule => rule.id),
         dailyReward: contract.dailyReward,
+        infractionCost: contract.infractionCost ?? 0,
         startDate: contract.startDate,
         endDate: contract.endDate,
         active: contract.active
@@ -107,6 +110,7 @@ const Contracts: React.FC = () => {
         parentId: authState.currentUser?.id || '',
         ruleIds: [],
         dailyReward: 1,
+        infractionCost: 0,
         startDate: new Date().toISOString().split('T')[0],
         endDate: '',
         active: true
@@ -124,7 +128,7 @@ const Contracts: React.FC = () => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: name === 'dailyReward' ? parseFloat(value) : value
+      [name]: (name === 'dailyReward' || name === 'infractionCost') ? parseFloat(value) : value
     });
   };
 
@@ -297,6 +301,10 @@ const Contracts: React.FC = () => {
                   </Typography>
                   
                   <Typography variant="body2" gutterBottom>
+                    <strong>Pénalité (à partir de la 2e infraction/jour):</strong> {contract.infractionCost}€
+                  </Typography>
+
+                  <Typography variant="body2" gutterBottom>
                     <strong>Période:</strong> Du {format(parseISO(contract.startDate), 'd MMMM yyyy', { locale: fr })} au {format(parseISO(contract.endDate), 'd MMMM yyyy', { locale: fr })}
                   </Typography>
                   
@@ -421,7 +429,7 @@ const Contracts: React.FC = () => {
             </Grid>
             
             <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 4 }}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <TextField
                   margin="normal"
                   required
@@ -435,7 +443,22 @@ const Contracts: React.FC = () => {
                   onChange={handleInputChange}
                 />
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
+              <Grid size={{ xs: 12, sm: 3 }}>
+                <TextField
+                  margin="normal"
+                  required
+                  fullWidth
+                  id="infractionCost"
+                  label="Pénalité infraction (€)"
+                  name="infractionCost"
+                  type="number"
+                  inputProps={{ min: 0, step: 0.1 }}
+                  value={formData.infractionCost}
+                  onChange={handleInputChange}
+                  helperText="Appliquée à partir de la 2e infraction du même jour"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <TextField
                   margin="normal"
                   required
@@ -449,7 +472,7 @@ const Contracts: React.FC = () => {
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
+              <Grid size={{ xs: 12, sm: 3 }}>
                 <TextField
                   margin="normal"
                   required

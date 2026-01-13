@@ -1,2 +1,5 @@
 backend/.env
 llm.txt
+__pycache__/
+**/__pycache__/
+*.py[cod]

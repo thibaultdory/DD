@@ -12,6 +12,7 @@ class Contract(Base):
     child_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     parent_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     daily_reward = Column(Float, nullable=False)
+    infraction_cost = Column(Float, nullable=False, default=0.0)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     active = Column(Boolean, default=True, nullable=False)

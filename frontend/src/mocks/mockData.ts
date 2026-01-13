@@ -180,6 +180,7 @@ export const mockContracts: Contract[] = [
     parentId: 'parent1',
     rules: mockRules, // Toutes les règles pour Eléa
     dailyReward: 1,
+    infractionCost: 0.5,
     startDate: formatDate(subMonths(today, 1)),
     endDate: '2025-07-01',
     active: true
@@ -191,6 +192,7 @@ export const mockContracts: Contract[] = [
     parentId: 'parent2',
     rules: mockRules.slice(0, 5), // Seulement les 5 premières règles pour Lucas
     dailyReward: 0.5,
+    infractionCost: 0.25,
     startDate: formatDate(subMonths(today, 2)),
     endDate: '2025-06-01',
     active: true

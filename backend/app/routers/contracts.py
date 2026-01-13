@@ -22,6 +22,7 @@ def serialize_contract(contract: Contract):
         "childId": str(contract.child_id),
         "parentId": str(contract.parent_id),
         "dailyReward": contract.daily_reward,
+        "infractionCost": contract.infraction_cost,
         "startDate": contract.start_date.isoformat(),
         "endDate": contract.end_date.isoformat(),
         "active": contract.active,
@@ -66,6 +67,7 @@ async def create_contract(data: ContractCreate, parent=Depends(require_parent), 
             child_id=data.childId,
             parent_id=data.parentId,
             daily_reward=data.dailyReward,
+            infraction_cost=data.infractionCost,
             start_date=data.startDate,
             end_date=data.endDate,
             active=True,
@@ -138,6 +140,8 @@ async def update_contract(contract_id: UUID, data: ContractUpdate, parent=Depend
             model_field = field
             if field == 'dailyReward':
                 model_field = 'daily_reward'
+            elif field == 'infractionCost':
+                model_field = 'infraction_cost'
             elif field == 'startDate':
                 model_field = 'start_date'
             elif field == 'endDate':

@@ -1,6 +1,6 @@
 import uuid
 from datetime import date
-from sqlalchemy import Column, String, Date, ForeignKey
+from sqlalchemy import Column, String, Date, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -11,6 +11,7 @@ class RuleViolation(Base):
     rule_id = Column(String, nullable=False)
     child_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     date = Column(Date, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     description = Column(String, nullable=True)
     reported_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
