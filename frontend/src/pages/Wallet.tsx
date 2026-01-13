@@ -165,11 +165,7 @@ const WalletPage: React.FC = () => {
         return;
       }
       
-      if (wallet && convertAmount > wallet.balance) {
-        setConvertError('Le montant ne peut pas dépasser le solde disponible');
-        return;
-      }
-      
+      // Allow overdraft: parent can convert more than current balance (creates debt)
       await walletService.convertToRealMoney(childId, convertAmount, convertComment);
       handleCloseConvertDialog();
     } catch (error) {
@@ -501,7 +497,7 @@ const WalletPage: React.FC = () => {
                 variant="outlined"
                 value={convertAmount || ''}
                 onChange={handleConvertAmountChange}
-                inputProps={{ min: 0, max: wallet.balance, step: 0.1 }}
+                inputProps={{ min: 0, step: 0.1 }}
                 error={!!convertError}
                 helperText={convertError}
                 sx={{ mb: 2 }}
@@ -525,7 +521,7 @@ const WalletPage: React.FC = () => {
                 onClick={handleConvertToRealMoney} 
                 variant="contained"
                 color="primary"
-                disabled={!convertAmount || convertAmount <= 0 || (wallet ? convertAmount > wallet.balance : false)}
+                disabled={!convertAmount || convertAmount <= 0}
               >
                 Convertir
               </Button>

@@ -18,6 +18,9 @@ class WalletTransaction(Base):
     child_id = Column(UUID(as_uuid=True), ForeignKey("wallets.child_id"), nullable=False)
     amount = Column(Float, nullable=False)
     date = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # Important: this column exists in DB and is used by a unique index for daily rewards.
+    # We always populate it from `date` in application code.
+    date_only = Column(Date, nullable=False)
     reason = Column(String, nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey("contracts.id"), nullable=True)
 
