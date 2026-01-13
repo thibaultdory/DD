@@ -79,7 +79,10 @@ async def apply_sql_migrations() -> None:
             logger.info(f"📄 MIGRATIONS: Applying {fname} ({len(statements)} statements)")
             for statement in statements:
                 try:
-                    await conn.execute(text(statement))
+                    # Use a SAVEPOINT per statement so a handled error does not
+                    # abort the entire migration transaction in PostgreSQL.
+                    async with conn.begin_nested():
+                        await conn.execute(text(statement))
                 except DBAPIError as e:
                     if _looks_like_already_applied_error(e):
                         logger.warning(f"⚠️  MIGRATIONS: Skipping already-applied statement in {fname}: {e}")
