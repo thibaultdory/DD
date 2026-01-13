@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Apply database migration to add unique constraint for wallet transactions
+Apply database migrations in backend/migrations
 """
 
 import asyncio
@@ -14,31 +14,36 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
 from app.core.database import AsyncSessionLocal
 
 async def apply_migration():
-    """Apply the wallet transaction unique constraint migration"""
-    print("🔧 Applying wallet transaction unique constraint migration...")
+    """Apply SQL migrations from backend/migrations (sorted by filename)."""
+    print("🔧 Applying database migrations from backend/migrations ...")
     
-    # Read the migration SQL
-    migration_file = Path("backend/migrations/add_wallet_transaction_unique_constraint.sql")
-    if not migration_file.exists():
-        print(f"❌ Migration file not found: {migration_file}")
+    migrations_dir = Path("backend/migrations")
+    if not migrations_dir.exists():
+        print(f"❌ Migrations directory not found: {migrations_dir}")
         return False
-    
-    migration_sql = migration_file.read_text()
+
+    migration_files = sorted(migrations_dir.glob("*.sql"))
+    if not migration_files:
+        print(f"ℹ️  No migration files found in {migrations_dir}")
+        return True
     
     async with AsyncSessionLocal() as session:
         try:
-            # Split the migration into individual statements
-            statements = [stmt.strip() for stmt in migration_sql.split(';') if stmt.strip()]
-            
-            for i, statement in enumerate(statements, 1):
-                if statement.startswith('--') or not statement:
-                    continue
-                    
-                print(f"📝 Executing statement {i}/{len(statements)}...")
-                await session.execute(statement)
-            
+            for migration_file in migration_files:
+                print(f"📄 Applying {migration_file} ...")
+                migration_sql = migration_file.read_text()
+
+                # NOTE: these migrations must not contain PL/pgSQL blocks with internal semicolons.
+                statements = [stmt.strip() for stmt in migration_sql.split(";") if stmt.strip()]
+
+                for i, statement in enumerate(statements, 1):
+                    if statement.startswith("--") or not statement:
+                        continue
+                    print(f"📝 Executing statement {i}/{len(statements)} from {migration_file.name}...")
+                    await session.execute(statement)
+
             await session.commit()
-            print("✅ Migration applied successfully!")
+            print("✅ Migrations applied successfully!")
             return True
             
         except Exception as e:

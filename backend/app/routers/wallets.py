@@ -97,7 +97,8 @@ async def convert_wallet(child_id: UUID, req: ConvertRequest, parent=Depends(req
             amount=-amount,
             reason=reason,
             contract_id=None,
-            date=datetime.utcnow()
+            date=datetime.utcnow(),
+            date_only=datetime.utcnow().date(),
         )
         db.add(tx)
         await db.commit()

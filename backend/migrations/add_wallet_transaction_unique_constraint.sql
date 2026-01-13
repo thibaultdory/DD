@@ -13,10 +13,6 @@ SET date_only = date::date;
 ALTER TABLE wallet_transactions 
 ALTER COLUMN date_only SET NOT NULL;
 
--- Set default value for future inserts
-ALTER TABLE wallet_transactions 
-ALTER COLUMN date_only SET DEFAULT CURRENT_DATE;
-
 -- Add the unique constraint for daily rewards only
 CREATE UNIQUE INDEX uq_daily_reward_per_child_contract_date 
 ON wallet_transactions (child_id, contract_id, date_only, reason)

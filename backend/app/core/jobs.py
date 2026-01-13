@@ -131,7 +131,8 @@ async def process_daily_rewards_for_date(target_date: date = None):
                         amount=daily_reward,
                         reason="Récompense journalière",
                         contract_id=contract_id,
-                        date=transaction_datetime  # Use target date instead of current date
+                        date=transaction_datetime,  # Use target date instead of current date
+                        date_only=target_date,
                     )
                     session.add(transaction)
                     
