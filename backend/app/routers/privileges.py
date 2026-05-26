@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from uuid import UUID
 import logging # Import logging
 from app.core.database import get_db
@@ -23,18 +23,46 @@ def serialize_priv(priv: Privilege):
     }
 
 @router.get("/privileges")
-async def get_privileges(parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Privilege))
+async def get_privileges(
+    parent: User = Depends(require_parent),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+):
+    total_result = await db.execute(select(func.count()).select_from(Privilege))
+    total = total_result.scalar_one()
+    result = await db.execute(
+        select(Privilege)
+        .order_by(Privilege.date.desc(), Privilege.id)
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
     privs = result.scalars().all()
-    return [serialize_priv(p) for p in privs]
+    return {"privileges": [serialize_priv(p) for p in privs], "total": total}
 
 @router.get("/privileges/user/{user_id}")
-async def get_user_privileges(user_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_user_privileges(
+    user_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+):
     if not (current_user.is_parent or current_user.id == user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-    result = await db.execute(select(Privilege).where(Privilege.assigned_to == user_id))
+    total_result = await db.execute(
+        select(func.count()).select_from(Privilege).where(Privilege.assigned_to == user_id)
+    )
+    total = total_result.scalar_one()
+    result = await db.execute(
+        select(Privilege)
+        .where(Privilege.assigned_to == user_id)
+        .order_by(Privilege.date.desc(), Privilege.id)
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
     privs = result.scalars().all()
-    return [serialize_priv(p) for p in privs]
+    return {"privileges": [serialize_priv(p) for p in privs], "total": total}
 
 @router.get("/privileges/date/{date_str}")
 async def get_privileges_by_date(date_str: str, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):

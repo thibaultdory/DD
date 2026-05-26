@@ -67,13 +67,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           window.history.replaceState({}, document.title, newUrl);
         }
 
-        const user = await authService.getCurrentUser();
-        if (user) {
-          const family = await authService.getFamilyMembers();
+        const session = await authService.getSession();
+        if (session.user) {
           setAuthState({
             isAuthenticated: true,
-            currentUser: user,
-            family
+            currentUser: session.user,
+            family: session.family
           });
         }
       } catch (error) {

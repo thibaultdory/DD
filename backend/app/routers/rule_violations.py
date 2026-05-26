@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from uuid import UUID
 from datetime import date, datetime
 import logging # Import logging
@@ -133,20 +133,48 @@ async def _rebalance_infraction_penalties(db: AsyncSession, child_id: UUID, day:
                 tx.contract_id = contract_id
 
 @router.get("/rule-violations")
-async def get_violations(parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(RuleViolation))
+async def get_violations(
+    parent: User = Depends(require_parent),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+):
+    total_result = await db.execute(select(func.count()).select_from(RuleViolation))
+    total = total_result.scalar_one()
+    result = await db.execute(
+        select(RuleViolation)
+        .order_by(RuleViolation.date.desc(), RuleViolation.id)
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
     violations = result.scalars().all()
-    return [serialize_violation(v) for v in violations]
+    return {"violations": [serialize_violation(v) for v in violations], "total": total}
 
 @router.get("/rule-violations/child/{child_id}")
-async def get_child_violations(child_id: UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_child_violations(
+    child_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+):
     # Allow parents to access any child's violations, or children to access their own violations
     if not (current_user.is_parent or current_user.id == child_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
     
-    result = await db.execute(select(RuleViolation).where(RuleViolation.child_id == child_id))
+    total_result = await db.execute(
+        select(func.count()).select_from(RuleViolation).where(RuleViolation.child_id == child_id)
+    )
+    total = total_result.scalar_one()
+    result = await db.execute(
+        select(RuleViolation)
+        .where(RuleViolation.child_id == child_id)
+        .order_by(RuleViolation.date.desc(), RuleViolation.id)
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
     violations = result.scalars().all()
-    return [serialize_violation(v) for v in violations]
+    return {"violations": [serialize_violation(v) for v in violations], "total": total}
 
 @router.get("/rule-violations/date/{date_str}")
 async def get_date_violations(date_str: str, parent: User = Depends(require_parent), db: AsyncSession = Depends(get_db)):

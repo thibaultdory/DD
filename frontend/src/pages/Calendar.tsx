@@ -247,12 +247,9 @@ const Calendar: React.FC = () => {
       const startDateStr = format(startDate, 'yyyy-MM-dd');
       const endDateStr = format(endDate, 'yyyy-MM-dd');
       
-      console.log(`[Calendar] Fetching data for period: ${startDateStr} to ${endDateStr} (view: ${calendarView})`);
-      
       try {
         // Use the new date range fetching method
         await refreshFamilyDataForDateRange(startDateStr, endDateStr);
-        console.log(`[Calendar] Data fetch completed for period: ${startDateStr} to ${endDateStr}`);
       } catch (error) {
         console.error('Error fetching data for current period:', error);
       }
@@ -429,8 +426,6 @@ const Calendar: React.FC = () => {
     const rule = rules?.find(r => r.id === ruleId);
     return rule ? rule.description : ruleId;
   };
-
-  console.log('Calendar tasks to display:', tasks);
 
   // Helper function to render day cell content
   const renderDayCell = (day: Date) => {

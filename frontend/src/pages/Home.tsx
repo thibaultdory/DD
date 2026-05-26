@@ -142,18 +142,6 @@ const Home: React.FC = () => {
 
   // Create timeline items from tasks and violations for a specific date range
   const createTimelineItemsForRange = useCallback((tasks: Task[], violations: RuleViolation[], startDate: Date, endDate: Date): TimelineItem[] => {
-    console.log('[Timeline] Creating timeline items for range:', { 
-      tasksCount: tasks.length, 
-      violationsCount: violations.length,
-      startDate: format(startDate, 'yyyy-MM-dd'),
-      endDate: format(endDate, 'yyyy-MM-dd')
-    });
-
-    // Log all incoming task due dates for this specific call
-    if (tasks.length > 0) {
-      console.log('[TimelineDebug] Incoming task dueDates for this range creation:', tasks.map(t => t.dueDate));
-    }
-    
     const items: TimelineItem[] = [];
     // Normalize range dates to the start of the day for accurate comparison
     const rangeStart = startOfDay(startDate);
@@ -168,23 +156,6 @@ const Home: React.FC = () => {
       const isAfterOrOnStart = taskDate.getTime() >= rangeStart.getTime();
       const isStrictlyBeforeExclusiveEnd = taskDate.getTime() < exclusiveRangeEnd.getTime();
 
-      // Detailed logging for tasks
-      if (true) { // Easy to toggle logging
-        console.log('[TimelineDebug] Task Check:', {
-          id: task.id,
-          title: task.title,
-          originalDueDate: task.dueDate,
-          normalizedTaskDateMs: taskDate.getTime(),
-          normalizedTaskDateISO: taskDate.toISOString(),
-          rangeStartMs: rangeStart.getTime(),
-          rangeStartISO: rangeStart.toISOString(),
-          exclusiveRangeEndMs: exclusiveRangeEnd.getTime(),
-          exclusiveRangeEndISO: exclusiveRangeEnd.toISOString(),
-          isAfterOrOnStart,
-          isStrictlyBeforeExclusiveEnd,
-          isInRange: isAfterOrOnStart && isStrictlyBeforeExclusiveEnd
-        });
-      }
       return isAfterOrOnStart && isStrictlyBeforeExclusiveEnd;
     });
     
@@ -196,28 +167,7 @@ const Home: React.FC = () => {
       const isAfterOrOnStart = violationDate.getTime() >= rangeStart.getTime();
       const isStrictlyBeforeExclusiveEnd = violationDate.getTime() < exclusiveRangeEnd.getTime();
       
-      // Detailed logging for violations
-      if (true) { // Easy to toggle logging
-        console.log('[TimelineDebug] Violation Check:', {
-          id: violation.id,
-          originalDate: violation.date,
-          normalizedViolationDateMs: violationDate.getTime(),
-          normalizedViolationDateISO: violationDate.toISOString(),
-          rangeStartMs: rangeStart.getTime(),
-          rangeStartISO: rangeStart.toISOString(),
-          exclusiveRangeEndMs: exclusiveRangeEnd.getTime(),
-          exclusiveRangeEndISO: exclusiveRangeEnd.toISOString(),
-          isAfterOrOnStart,
-          isStrictlyBeforeExclusiveEnd,
-          isInRange: isAfterOrOnStart && isStrictlyBeforeExclusiveEnd
-        });
-      }
       return isAfterOrOnStart && isStrictlyBeforeExclusiveEnd;
-    });
-    
-    console.log('[Timeline] Filtered for date range (using startOfDay):', {
-      tasksInRange: filteredTasks.length,
-      violationsInRange: filteredViolations.length
     });
     
     // Add tasks
@@ -241,22 +191,12 @@ const Home: React.FC = () => {
     });
     
     // Sort by date (oldest first for chronological timeline)
-    const sortedItems = items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    console.log('[Timeline] Created items for range:', {
-      totalItems: sortedItems.length,
-      itemIds: sortedItems.map(item => item.id)
-    });
-    
-    return sortedItems;
+    return items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, []);
 
   // Filter data based on selected child
   const getFilteredData = useCallback(() => {
-    console.log('[Timeline] Filtering data for child:', selectedChild);
-    
     if (!familyTasks || !familyViolations) {
-      console.log('[Timeline] No family data available yet');
       return { tasks: [], violations: [] };
     }
     
@@ -284,19 +224,12 @@ const Home: React.FC = () => {
       );
     }
     
-    console.log('[Timeline] Filtered data:', {
-      tasks: filteredTasks.length,
-      violations: filteredViolations.length
-    });
-    
     return { tasks: filteredTasks, violations: filteredViolations };
   }, [familyTasks, familyViolations, selectedChild, authState.currentUser, getCalendarTasks]);
 
   // Load initial data and setup timeline - ONLY ONCE
   useEffect(() => {
     if (!authState.currentUser || initialLoading || initialTimelineLoaded) return;
-    
-    console.log('[Timeline] Loading initial data');
     
     const loadInitialData = async () => {
       setLoading(true);
@@ -306,15 +239,11 @@ const Home: React.FC = () => {
         const startDateStr = format(initialStart, 'yyyy-MM-dd');
         const endDateStr = format(initialEnd, 'yyyy-MM-dd');
         
-        console.log('[Timeline] Initial data range:', { startDateStr, endDateStr });
-        
         await refreshFamilyDataForDateRange(startDateStr, endDateStr);
         
         // Set the date range after successful load
         setDateRange({ start: initialStart, end: initialEnd });
         setInitialTimelineLoaded(true);
-        
-        console.log('[Timeline] Initial data load completed');
       } catch (error) {
         console.error('[Timeline] Error loading initial timeline data:', error);
       } finally {
@@ -331,12 +260,8 @@ const Home: React.FC = () => {
     
     // Only create initial timeline if we don't have any items yet
     if (timelineItems.length === 0) {
-      console.log('[Timeline] Creating initial timeline');
-      
       const { tasks, violations } = getFilteredData();
       const items = createTimelineItemsForRange(tasks, violations, dateRange.start, dateRange.end);
-      
-      console.log('[Timeline] Setting initial timeline items:', items.length);
       setTimelineItems(items);
     }
   }, [initialTimelineLoaded, familyTasks, familyViolations, timelineItems.length, getFilteredData, createTimelineItemsForRange, dateRange]);
@@ -345,12 +270,8 @@ const Home: React.FC = () => {
   useEffect(() => {
     if (!initialTimelineLoaded) return;
     
-    console.log('[Timeline] Child selection changed, recreating timeline for new filter');
-    
     const { tasks, violations } = getFilteredData();
     const items = createTimelineItemsForRange(tasks, violations, dateRange.start, dateRange.end);
-    
-    console.log('[Timeline] Setting filtered timeline items:', items.length);
     setTimelineItems(items);
   }, [selectedChild]); // Only depend on selectedChild, not all the data
 
@@ -358,12 +279,8 @@ const Home: React.FC = () => {
   useEffect(() => {
     if (!initialTimelineLoaded || !familyTasks || !familyViolations) return;
     
-    console.log('[Timeline] Family data changed, recreating timeline');
-    
     const { tasks, violations } = getFilteredData();
     const items = createTimelineItemsForRange(tasks, violations, dateRange.start, dateRange.end);
-    
-    console.log('[Timeline] Setting updated timeline items:', items.length);
     setTimelineItems(items);
   }, [familyTasks, familyViolations, getFilteredData, createTimelineItemsForRange, dateRange, initialTimelineLoaded]); // React to data changes
 
@@ -386,16 +303,13 @@ const Home: React.FC = () => {
       // Only adjust if scrollHeight has actually increased and was previously non-zero
       if (heightDifference > 0 && previousScrollHeight > 0) {
         scrollContainer.scrollTop = previousScrollTop + heightDifference;
-        console.log('[Timeline] Adjusted scroll for PAST load:', { previousScrollTop, previousScrollHeight, currentScrollHeight, heightDifference, newScrollTop: scrollContainer.scrollTop });
       } else {
         // If no height change (e.g., no unique items added) or unexpected scrollHeight, maintain previous scrollTop
         scrollContainer.scrollTop = previousScrollTop;
-        console.log('[Timeline] Maintained scroll for PAST load (no height change or unexpected height):', { previousScrollTop, currentScrollHeight });
       }
     } else if (loadTypeRef.current === 'future') {
       // For future loads, content is appended, so we want to maintain the current scroll position.
       scrollContainer.scrollTop = beforeScrollTopRef.current;
-      console.log('[Timeline] Maintained scroll for FUTURE load at:', beforeScrollTopRef.current);
     }
 
     loadTypeRef.current = null; // Reset the load type ref after handling
@@ -404,15 +318,12 @@ const Home: React.FC = () => {
   // Auto-scroll to today's items on initial load (only once)
   useEffect(() => {
     if (timelineItems.length > 0 && !loading && !initialLoading && !hasAutoScrolled.current) {
-      console.log('[Timeline] Auto-scrolling to today');
-      
       const timer = setTimeout(() => {
         const todayItem = timelineItems.find(item => 
           isSameDay(parseISO(item.date), new Date())
         );
         
         if (todayItem && scrollContainerRef.current) {
-          console.log('[Timeline] Found today item, scrolling to it:', todayItem.id);
           const itemElement = scrollContainerRef.current.querySelector(`[data-item-id="${todayItem.id}"]`);
           if (itemElement) {
             itemElement.scrollIntoView({ 
@@ -424,7 +335,6 @@ const Home: React.FC = () => {
           // If no today item found, scroll to approximately where today would be
           const scrollContainer = scrollContainerRef.current;
           if (scrollContainer) {
-            console.log('[Timeline] No today item found, calculating scroll position');
             const today = new Date();
             const containerHeight = scrollContainer.scrollHeight;
             const containerClientHeight = scrollContainer.clientHeight;
@@ -438,7 +348,6 @@ const Home: React.FC = () => {
               const relativePosition = (todayTime - startTime) / (endTime - startTime);
               const scrollPosition = Math.max(0, (containerHeight - containerClientHeight) * relativePosition);
               
-              console.log('[Timeline] Scrolling to calculated position:', scrollPosition);
               scrollContainer.scrollTo({
                 top: scrollPosition,
                 behavior: 'smooth'
@@ -457,17 +366,14 @@ const Home: React.FC = () => {
   // Load more data in past direction - PREPEND new items to beginning
   const loadPastData = useCallback(async () => {
     if (loadingPast || loadingFuture || !initialTimelineLoaded) {
-      console.log('[Timeline] Already loading data or timeline not ready, skipping past data load');
       return;
     }
     
     const now = Date.now();
     if (now - lastDataLoadRef.current.past < 2000) {
-      console.log('[Timeline] Past data load too recent, skipping');
       return;
     }
-    
-    console.log('[Timeline] Loading past data');
+
     setLoadingPast(true);
     lastDataLoadRef.current.past = now;
     
@@ -482,9 +388,6 @@ const Home: React.FC = () => {
 
       // const beforeScrollTop = scrollContainer.scrollTop; // No longer needed here
       // const beforeScrollHeight = scrollContainer.scrollHeight; // No longer needed here
-      
-      console.log('[Timeline] Before past load - Stored scroll:', beforeScrollTopRef.current, 'Stored height:', beforeScrollHeightRef.current);
-      
       const newStart = subDays(dateRange.start, 7);
       // Corrected endDate for fetching: it should be the day *before* the current dateRange.start
       const fetchEndDate = subDays(dateRange.start, 1);
@@ -492,13 +395,10 @@ const Home: React.FC = () => {
       const startDateStr = format(newStart, 'yyyy-MM-dd');
       const endDateStr = format(fetchEndDate, 'yyyy-MM-dd');
       
-      console.log('[Timeline] Loading past data range:', { startDateStr, endDateStr });
-      
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
       // Directly use familyTasks and familyViolations from the hook's scope.
       // These should be the updated values if DataCacheProvider updates them and causes re-render/callback recreation.
-      console.log('[Timeline] After refresh, context familyTasks count:', familyTasks?.length, 'familyViolations count:', familyViolations?.length);
       const itemsToProcessTasks = familyTasks || [];
       const itemsToProcessViolations = familyViolations || [];
 
@@ -506,36 +406,22 @@ const Home: React.FC = () => {
       // Pass the potentially updated familyTasks/Violations from context here.
       const newItems = createTimelineItemsForRange(itemsToProcessTasks, itemsToProcessViolations, newStart, fetchEndDate);
       
-      console.log('[Timeline] New past items to process:', newItems.length);
-      
       setTimelineItems(prevItems => {
         const existingItemIds = new Set(prevItems.map(item => item.id));
         const uniqueNewItems = newItems.filter(item => !existingItemIds.has(item.id));
-        
-        console.log('[Timeline] Unique new past items to prepend:', uniqueNewItems.length);
-        
+
         if (uniqueNewItems.length === 0) {
-          console.log('[Timeline] No unique new past items to add.');
           return prevItems;
         }
 
         // Combine and re-sort to ensure chronological order
         const combinedItems = [...uniqueNewItems, ...prevItems];
         const sortedItems = combinedItems.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        
-        console.log('[Timeline] Timeline after prepending and sorting past items:', {
-          oldCount: prevItems.length,
-          addedCount: uniqueNewItems.length,
-          totalCount: sortedItems.length
-        });
         return sortedItems;
       });
       
       // Update date range only after items are set
       setDateRange(prev => ({ ...prev, start: newStart }));
-      
-      console.log('[Timeline] Past data load completed');
-      
       // REMOVE OLD setTimeout for scroll adjustment
       // setTimeout(() => { ... }, 250);
       
@@ -549,17 +435,14 @@ const Home: React.FC = () => {
   // Load more data in future direction - APPEND new items to end
   const loadFutureData = useCallback(async () => {
     if (loadingPast || loadingFuture || !initialTimelineLoaded) {
-      console.log('[Timeline] Already loading data or timeline not ready, skipping future data load');
       return;
     }
     
     const now = Date.now();
     if (now - lastDataLoadRef.current.future < 2000) {
-      console.log('[Timeline] Future data load too recent, skipping');
       return;
     }
-    
-    console.log('[Timeline] Loading future data');
+
     setLoadingFuture(true);
     lastDataLoadRef.current.future = now;
     
@@ -574,9 +457,6 @@ const Home: React.FC = () => {
       loadTypeRef.current = 'future'; // Indicate that a 'future' load is about to happen
 
       // const beforeScrollTop = scrollContainer.scrollTop; // No longer needed here
-      
-      console.log('[Timeline] Before future load - Stored scroll:', beforeScrollTopRef.current);
-      
       const newEnd = addDays(dateRange.end, 7);
       // Corrected startDate for fetching: it should be the day *after* the current dateRange.end
       const fetchStartDate = addDays(dateRange.end, 1);
@@ -584,12 +464,8 @@ const Home: React.FC = () => {
       const startDateStr = format(fetchStartDate, 'yyyy-MM-dd');
       const endDateStr = format(newEnd, 'yyyy-MM-dd');
       
-      console.log('[Timeline] Loading future data range:', { startDateStr, endDateStr });
-      
       await refreshFamilyDataForDateRange(startDateStr, endDateStr);
       
-      // Directly use familyTasks and familyViolations from the hook's scope.
-      console.log('[Timeline] After refresh, context familyTasks count:', familyTasks?.length, 'familyViolations count:', familyViolations?.length);
       const itemsToProcessTasksFuture = familyTasks || [];
       const itemsToProcessViolationsFuture = familyViolations || [];
 
@@ -597,36 +473,22 @@ const Home: React.FC = () => {
       // Pass the potentially updated familyTasks/Violations from context here.
       const newItems = createTimelineItemsForRange(itemsToProcessTasksFuture, itemsToProcessViolationsFuture, fetchStartDate, newEnd);
       
-      console.log('[Timeline] New future items to process:', newItems.length);
-      
       setTimelineItems(prevItems => {
         const existingItemIds = new Set(prevItems.map(item => item.id));
         const uniqueNewItems = newItems.filter(item => !existingItemIds.has(item.id));
 
-        console.log('[Timeline] Unique new future items to append:', uniqueNewItems.length);
-
         if (uniqueNewItems.length === 0) {
-          console.log('[Timeline] No unique new future items to add.');
           return prevItems;
         }
 
         // Combine and re-sort to ensure chronological order
         const combinedItems = [...prevItems, ...uniqueNewItems];
         const sortedItems = combinedItems.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        
-        console.log('[Timeline] Timeline after appending and sorting future items:', {
-          oldCount: prevItems.length,
-          addedCount: uniqueNewItems.length,
-          totalCount: sortedItems.length
-        });
         return sortedItems;
       });
       
       // Update date range only after items are set
       setDateRange(prev => ({ ...prev, end: newEnd }));
-      
-      console.log('[Timeline] Future data load completed');
-      
       // REMOVE OLD setTimeout for scroll adjustment
       // setTimeout(() => { ... }, 250);
       
@@ -642,28 +504,13 @@ const Home: React.FC = () => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     const scrollThreshold = 10; // Trigger loading when 10px from edge
     
-    // Only log every 10th scroll event to avoid spam
-    if (Math.random() < 0.1) {
-      console.log('[Timeline] Scroll event:', { 
-        scrollTop, 
-        scrollHeight, 
-        clientHeight, 
-        nearTop: scrollTop < 300,
-        nearBottom: scrollHeight - scrollTop - clientHeight < 300,
-        loadingPast,
-        loadingFuture
-      });
-    }
-    
     // Near top - load past data (chronological: older events)
     if (scrollTop < scrollThreshold && !loadingPast && !loadingFuture && initialTimelineLoaded) {
-      console.log('[Timeline] Triggering past data load from scroll (scrollTop < threshold)');
       loadPastData();
     }
     
     // Near bottom - load future data (chronological: newer events)
     if (scrollHeight - scrollTop - clientHeight < scrollThreshold && !loadingFuture && !loadingPast && initialTimelineLoaded) {
-      console.log('[Timeline] Triggering future data load from scroll (bottom < threshold)');
       loadFutureData();
     }
   }, [loadingPast, loadingFuture, loadPastData, loadFutureData, initialTimelineLoaded]);

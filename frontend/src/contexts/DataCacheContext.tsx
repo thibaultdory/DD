@@ -70,7 +70,12 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
   const [initialLoading, setInitialLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
   const isRefreshingDateRangeRef = useRef(false);
-  const lastFetchedRangeRef = useRef<string | null>(null);
+  const inFlightRangeRef = useRef<Set<string>>(new Set());
+  const rulesRef = useRef<Rule[] | null>(null);
+
+  useEffect(() => {
+    rulesRef.current = rules;
+  }, [rules]);
 
   const refreshFamilyData = useCallback(async () => {
     if (!authState.currentUser) return;
@@ -102,22 +107,17 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     
     const rangeKey = `${startDate}_${endDate}`;
     
-    // Prevent fetching the same range multiple times in quick succession
-    if (lastFetchedRangeRef.current === rangeKey && dataLoading) {
-      console.log(`[DataCache] Skipping duplicate request for range: ${startDate} to ${endDate}`);
+    if (inFlightRangeRef.current.has(rangeKey)) {
       return;
     }
-    
-    console.log(`[DataCache] Starting date range refresh: ${startDate} to ${endDate}`);
-    
+
     try {
       setDataLoading(true);
       isRefreshingDateRangeRef.current = true;
-      lastFetchedRangeRef.current = rangeKey;
+      inFlightRangeRef.current.add(rangeKey);
       
-      // Fetch data for the specific date range in parallel
       const [rulesResponse, tasksResponse, privilegesResponse, violationsResponse] = await Promise.all([
-        ruleService.getRules(), // Rules don't change with date range
+        rulesRef.current ? Promise.resolve(rulesRef.current) : ruleService.getRules(),
         taskService.getTasksForCalendarRange(startDate, endDate),
         privilegeService.getPrivilegesForCalendarRange(startDate, endDate),
         ruleViolationService.getRuleViolationsForCalendarRange(startDate, endDate)
@@ -157,13 +157,12 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
         newViolations.forEach(violation => violationMap.set(violation.id, violation)); // New violations overwrite old
         return Array.from(violationMap.values());
       });
-      
-      console.log(`[DataCache] Date range refresh completed and data merged: ${startDate} to ${endDate}`);
     } catch (error) {
       console.error('Error refreshing family data for date range:', error);
     } finally {
       setDataLoading(false);
       isRefreshingDateRangeRef.current = false;
+      inFlightRangeRef.current.delete(rangeKey);
     }
   }, [authState.currentUser]);
 
@@ -215,7 +214,10 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
   // Initialize cache when user logs in
   useEffect(() => {
     if (authState.currentUser) {
-      refreshFamilyData();
+      setFamilyTasks([]);
+      setFamilyPrivileges([]);
+      setFamilyViolations([]);
+      setInitialLoading(false);
     } else {
       // Clear cache when user logs out
       setFamilyTasks(null);
@@ -234,7 +236,6 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     const unsubscribeTasks = taskService.subscribe(() => {
       // Ignore subscription events during date range refresh to prevent cascading calls
       if (isRefreshingDateRangeRef.current) return;
-      console.log('Task data changed, refreshing tasks...');
       refreshTasks();
     });
 
@@ -242,7 +243,6 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     const unsubscribePrivileges = privilegeService.subscribe(() => {
       // Ignore subscription events during date range refresh to prevent cascading calls
       if (isRefreshingDateRangeRef.current) return;
-      console.log('Privilege data changed, refreshing privileges...');
       refreshPrivileges();
     });
 
@@ -250,7 +250,6 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
     const unsubscribeViolations = ruleViolationService.subscribe(() => {
       // Ignore subscription events during date range refresh to prevent cascading calls
       if (isRefreshingDateRangeRef.current) return;
-      console.log('Violation data changed, refreshing violations...');
       refreshViolations();
     });
 
@@ -399,4 +398,4 @@ export const DataCacheProvider: React.FC<DataCacheProviderProps> = ({ children }
       {children}
     </DataCacheContext.Provider>
   );
-}; 
+};

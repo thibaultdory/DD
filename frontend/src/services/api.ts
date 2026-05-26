@@ -77,6 +77,15 @@ export const authService = {
     return response.data;
   },
 
+  async getSession(): Promise<{ user: User | null; family: User[] }> {
+    if (USE_MOCK_DATA) {
+      return { user: mockUsers[0], family: mockUsers };
+    }
+
+    const response = await api.get('/auth/session');
+    return response.data;
+  },
+
   // Récupérer tous les membres de la famille
   async getFamilyMembers(): Promise<User[]> {
     if (USE_MOCK_DATA) {
@@ -520,9 +529,15 @@ export const ruleViolationService = {
     const response = await api.get('/rule-violations', {
       params: { page, limit }
     });
-    // Adapter la réponse si l'API renvoie un tableau directement
-    const violations = Array.isArray(response.data) ? response.data : [];
-    const total = violations.length; // Le backend ne semble pas paginer, on calcule le total ici
+    if (!Array.isArray(response.data)) {
+      return {
+        violations: response.data.violations || [],
+        total: response.data.total || 0
+      };
+    }
+
+    const violations = response.data;
+    const total = violations.length;
     const paginatedViolations = violations.slice((page - 1) * limit, page * limit);
     
     return {
@@ -548,9 +563,15 @@ export const ruleViolationService = {
     const response = await api.get(`/rule-violations/child/${childId}`, {
       params: { page, limit }
     });
-    // Adapter la réponse si l'API renvoie un tableau directement
-    const violations = Array.isArray(response.data) ? response.data : [];
-    const total = violations.length; // Le backend ne semble pas paginer, on calcule le total ici
+    if (!Array.isArray(response.data)) {
+      return {
+        violations: response.data.violations || [],
+        total: response.data.total || 0
+      };
+    }
+
+    const violations = response.data;
+    const total = violations.length;
     const paginatedViolations = violations.slice((page - 1) * limit, page * limit);
     
     return {

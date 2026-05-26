@@ -24,6 +24,16 @@ oauth.register(
     client_kwargs={"scope": "openid email profile"},
 )
 
+def serialize_user(user: User):
+    return {
+        "id": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "birthDate": str(user.birth_date),
+        "isParent": user.is_parent,
+        "profilePicture": user.profile_picture,
+    }
+
 @router.get("/google")
 async def auth_google(request: Request):
     """Initiate Google OAuth2 login flow"""
@@ -107,13 +117,30 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
     if not user:
         logger.warning(f"User with id {uid} not found in database, but was in session.") # Log warning
         return None
+    return serialize_user(user)
+
+@router.get("/session")
+async def get_session(request: Request, db: AsyncSession = Depends(get_db)):
+    """Return the current user and family members in one request."""
+    user_id = request.session.get("user")
+    if not user_id:
+        return {"user": None, "family": []}
+    try:
+        uid = UUID(user_id)
+    except ValueError:
+        logger.warning(f"Invalid user_id format in session: {user_id}")
+        return {"user": None, "family": []}
+
+    user = await db.get(User, uid)
+    if not user:
+        logger.warning(f"User with id {uid} not found in database, but was in session.")
+        return {"user": None, "family": []}
+
+    result = await db.execute(select(User))
+    family = result.scalars().all()
     return {
-        "id": str(user.id),
-        "name": user.name,
-        "email": user.email,
-        "birthDate": str(user.birth_date),
-        "isParent": user.is_parent,
-        "profilePicture": user.profile_picture,
+        "user": serialize_user(user),
+        "family": [serialize_user(member) for member in family],
     }
 
 @router.post("/logout")

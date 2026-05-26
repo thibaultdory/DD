@@ -36,6 +36,50 @@ async def serialize_task(task: Task, db: AsyncSession):
         "parentTaskId": str(task.parent_task_id) if task.parent_task_id else None,
     }
 
+def serialize_task_with_assignments(task: Task, assigned_user_ids: list[UUID], current_user: User | None = None):
+    task_data = {
+        "id": str(task.id),
+        "title": task.title,
+        "description": task.description,
+        "assignedTo": [str(user_id) for user_id in assigned_user_ids],
+        "dueDate": task.due_date.isoformat(),
+        "completed": task.completed,
+        "createdBy": str(task.created_by),
+        "createdAt": task.created_at.isoformat(),
+        "isRecurring": task.is_recurring,
+        "weekdays": task.weekdays if task.weekdays else None,
+        "endDate": task.end_date.isoformat() if task.end_date else None,
+        "parentTaskId": str(task.parent_task_id) if task.parent_task_id else None,
+    }
+
+    if current_user is not None:
+        task_data["canModify"] = current_user.is_parent or current_user.id in assigned_user_ids
+
+    return task_data
+
+async def serialize_tasks(tasks: list[Task], db: AsyncSession, current_user: User | None = None):
+    if not tasks:
+        return []
+
+    task_ids = [task.id for task in tasks]
+    assignments_result = await db.execute(
+        select(task_assignments.c.task_id, task_assignments.c.user_id)
+        .where(task_assignments.c.task_id.in_(task_ids))
+    )
+
+    assignments_by_task: dict[UUID, list[UUID]] = {task_id: [] for task_id in task_ids}
+    for task_id, user_id in assignments_result.all():
+        assignments_by_task.setdefault(task_id, []).append(user_id)
+
+    return [
+        serialize_task_with_assignments(
+            task,
+            assignments_by_task.get(task.id, []),
+            current_user,
+        )
+        for task in tasks
+    ]
+
 # ---------------------------------------------------------------------------
 # NEW ENDPOINT: Get a single task by id
 # ---------------------------------------------------------------------------
@@ -84,7 +128,7 @@ async def get_tasks(
     result = await db.execute(stmt)
     tasks = result.scalars().all()
     return {
-        "tasks": [await serialize_task(t, db) for t in tasks],
+        "tasks": await serialize_tasks(tasks, db),
         "total": total
     }
 
@@ -110,7 +154,7 @@ async def get_user_tasks(
     tasks = result.scalars().all()
     logger.info(f"Returning {len(tasks)} tasks for user {user_id} (total: {total})")
     return {
-        "tasks": [await serialize_task(t, db) for t in tasks],
+        "tasks": await serialize_tasks(tasks, db),
         "total": total
     }
 
@@ -121,7 +165,7 @@ async def get_tasks_by_date(due_date: date, current_user: User = Depends(get_cur
         stmt = stmt.join(task_assignments).where(task_assignments.c.user_id == current_user.id)
     result = await db.execute(stmt)
     tasks = result.scalars().all()
-    return [await serialize_task(t, db) for t in tasks]
+    return await serialize_tasks(tasks, db)
 
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
@@ -536,20 +580,7 @@ async def get_tasks_for_calendar(current_user: User = Depends(get_current_user),
     result = await db.execute(select(Task))
     tasks = result.scalars().all()
     
-    serialized_tasks = []
-    for task in tasks:
-        task_data = await serialize_task(task, db)
-        # Add permission flag for frontend
-        if current_user.is_parent:
-            task_data["canModify"] = True
-        else:
-            # Check if current user is assigned to this task
-            is_assigned = str(current_user.id) in task_data["assignedTo"]
-            task_data["canModify"] = is_assigned
-        
-        serialized_tasks.append(task_data)
-    
-    return serialized_tasks
+    return await serialize_tasks(tasks, db, current_user)
 
 @router.get("/tasks/calendar/range")
 async def get_tasks_for_calendar_range(
@@ -577,17 +608,4 @@ async def get_tasks_for_calendar_range(
     result = await db.execute(stmt)
     tasks = result.scalars().all()
     
-    serialized_tasks = []
-    for task in tasks:
-        task_data = await serialize_task(task, db)
-        # Add permission flag for frontend
-        if current_user.is_parent:
-            task_data["canModify"] = True
-        else:
-            # Check if current user is assigned to this task
-            is_assigned = str(current_user.id) in task_data["assignedTo"]
-            task_data["canModify"] = is_assigned
-        
-        serialized_tasks.append(task_data)
-    
-    return serialized_tasks
+    return await serialize_tasks(tasks, db, current_user)
