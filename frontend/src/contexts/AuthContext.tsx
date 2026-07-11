@@ -52,8 +52,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           let errorMessage = 'Erreur de connexion';
           if (error === 'oauth_failed') {
             errorMessage = 'Échec de l\'authentification avec Google. Veuillez réessayer.';
-          } else if (error === 'no_email') {
-            errorMessage = 'Aucune adresse email fournie par Google. Veuillez vérifier vos paramètres de compte.';
+          } else if (error === 'unverified_email') {
+            errorMessage = 'Votre adresse email Google doit être vérifiée.';
+          } else if (error === 'access_denied') {
+            errorMessage = 'Ce compte Google n’est pas autorisé à accéder à DD.';
           } else if (error === 'database_error') {
             errorMessage = 'Erreur lors de la création de votre compte. Veuillez réessayer.';
           } else if (message) {

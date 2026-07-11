@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, status
+from fastapi import APIRouter, Request, Depends
 import logging  # Import logging
+import secrets
 from starlette.responses import RedirectResponse
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
-from datetime import date
 from urllib.parse import urlencode
 
 from app.core.config import settings
@@ -34,6 +34,19 @@ def serialize_user(user: User):
         "profilePicture": user.profile_picture,
     }
 
+def get_verified_email(user_info: dict) -> str | None:
+    """Return a normalized verified Google email, or reject the identity."""
+    email = user_info.get("email")
+    if not isinstance(email, str) or user_info.get("email_verified") is not True:
+        return None
+    normalized_email = email.strip().casefold()
+    return normalized_email or None
+
+async def get_preprovisioned_user(db: AsyncSession, email: str) -> User | None:
+    """Look up an existing DD user without creating an account."""
+    result = await db.execute(select(User).filter_by(email=email))
+    return result.scalars().first()
+
 @router.get("/google")
 async def auth_google(request: Request):
     """Initiate Google OAuth2 login flow"""
@@ -55,43 +68,30 @@ async def auth_callback(request: Request, db: AsyncSession = Depends(get_db)):
         except Exception:
             # Fallback to userinfo endpoint if id_token parsing fails
             user_info = await oauth.google.userinfo(token=token)
-    except OAuthError as e:  # Catch exception as e
-        logger.error(f"OAuth authentication failed: {e}", exc_info=True)  # Log error
-        # Redirect to frontend with error instead of raising HTTP exception
-        error_params = urlencode({"error": "oauth_failed", "message": f"OAuth authentication failed: {str(e)}"})
+    except OAuthError:
+        logger.error("OAuth authentication failed", exc_info=True)
+        error_params = urlencode({"error": "oauth_failed"})
         return RedirectResponse(url=f"{settings.frontend_url}?{error_params}")
 
-    email = user_info.get("email")
+    email = get_verified_email(user_info)
     if not email:
-        logger.error("No email in OAuth token from Google.") # Log error
-        # Redirect to frontend with error instead of raising HTTP exception
-        error_params = urlencode({"error": "no_email", "message": "No email provided by Google"})
+        logger.warning("Google account did not provide a verified email address")
+        error_params = urlencode({"error": "unverified_email"})
         return RedirectResponse(url=f"{settings.frontend_url}?{error_params}")
-    
-    name = user_info.get("name", email)
-    picture = user_info.get("picture")
-    # As birth_date is required, set a default placeholder
-    birth_date = date(2000, 1, 1)
 
     try:
-        # Fetch or create user
-        result = await db.execute(select(User).filter_by(email=email))
-        user = result.scalars().first()
+        # DD is a private family application: only pre-provisioned users may sign in.
+        user = await get_preprovisioned_user(db, email)
         if not user:
-            logger.info(f"Creating new user with email: {email}") # Log info
-            user = User(
-                email=email,
-                name=name,
-                birth_date=birth_date,
-                is_parent=False,
-                profile_picture=picture,
-            )
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
+            logger.warning("Rejected Google login for a non-provisioned account")
+            request.session.clear()
+            error_params = urlencode({"error": "access_denied"})
+            return RedirectResponse(url=f"{settings.frontend_url}?{error_params}")
 
         # Store user ID in session
+        request.session.clear()
         request.session["user"] = str(user.id)
+        request.session["csrf_token"] = secrets.token_urlsafe(32)
 
         # Redirect to frontend
         return RedirectResponse(url=settings.frontend_url)
@@ -136,11 +136,17 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)):
         logger.warning(f"User with id {uid} not found in database, but was in session.")
         return {"user": None, "family": []}
 
+    csrf_token = request.session.get("csrf_token")
+    if not csrf_token:
+        csrf_token = secrets.token_urlsafe(32)
+        request.session["csrf_token"] = csrf_token
+
     result = await db.execute(select(User))
     family = result.scalars().all()
     return {
         "user": serialize_user(user),
         "family": [serialize_user(member) for member in family],
+        "csrfToken": csrf_token,
     }
 
 @router.post("/logout")

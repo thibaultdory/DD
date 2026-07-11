@@ -35,6 +35,14 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+let csrfToken: string | null = null;
+
+api.interceptors.request.use((config) => {
+  if (csrfToken && config.method && !['get', 'head', 'options'].includes(config.method.toLowerCase())) {
+    config.headers.set('X-CSRF-Token', csrfToken);
+  }
+  return config;
+});
 export { API_BASE_URL };
 
 // Événements pour notifier les changements de données
@@ -77,12 +85,13 @@ export const authService = {
     return response.data;
   },
 
-  async getSession(): Promise<{ user: User | null; family: User[] }> {
+  async getSession(): Promise<{ user: User | null; family: User[]; csrfToken?: string }> {
     if (USE_MOCK_DATA) {
       return { user: mockUsers[0], family: mockUsers };
     }
 
     const response = await api.get('/auth/session');
+    csrfToken = response.data.csrfToken || null;
     return response.data;
   },
 

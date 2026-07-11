@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.middleware import SlowAPIMiddleware
-from fastapi_csrf_protect import CsrfProtect
+from fastapi import Depends
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.initial_data import seed_initial_data
@@ -27,6 +27,7 @@ from app.routers.contracts import router as contracts_router
 from app.routers.wallets import router as wallets_router
 from datetime import date
 from app.routers.analytics import router as analytics_router
+from app.core.dependencies import validate_csrf
 
 logger = logging.getLogger(__name__)
 
@@ -56,23 +57,19 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
 
-# CSRF configuration
-@CsrfProtect.load_config
-def get_csrf_config():
-    return settings
-
 # Include routers
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-app.include_router(users_router, prefix="/api", tags=["users"])
-app.include_router(tasks_router, prefix="/api", tags=["tasks"])
-app.include_router(privileges_router, prefix="/api", tags=["privileges"])
-app.include_router(rule_violations_router, prefix="/api", tags=["rule-violations"])
-app.include_router(contracts_router, prefix="/api", tags=["contracts"])
-app.include_router(wallets_router, prefix="/api", tags=["wallets"])
-app.include_router(analytics_router, prefix="/api", tags=["analytics"])
+csrf_dependencies = [Depends(validate_csrf)]
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"], dependencies=csrf_dependencies)
+app.include_router(users_router, prefix="/api", tags=["users"], dependencies=csrf_dependencies)
+app.include_router(tasks_router, prefix="/api", tags=["tasks"], dependencies=csrf_dependencies)
+app.include_router(privileges_router, prefix="/api", tags=["privileges"], dependencies=csrf_dependencies)
+app.include_router(rule_violations_router, prefix="/api", tags=["rule-violations"], dependencies=csrf_dependencies)
+app.include_router(contracts_router, prefix="/api", tags=["contracts"], dependencies=csrf_dependencies)
+app.include_router(wallets_router, prefix="/api", tags=["wallets"], dependencies=csrf_dependencies)
+app.include_router(analytics_router, prefix="/api", tags=["analytics"], dependencies=csrf_dependencies)
 # Rules endpoints
 from app.routers.rules import router as rules_router
-app.include_router(rules_router, prefix="/api", tags=["rules"])
+app.include_router(rules_router, prefix="/api", tags=["rules"], dependencies=csrf_dependencies)
 
 # Global scheduler instance
 scheduler = None

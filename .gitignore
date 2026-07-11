@@ -1,4 +1,8 @@
+.env
 backend/.env
+backup_all.sql
+backups/
+restart_prod.sh
 llm.txt
 __pycache__/
 **/__pycache__/

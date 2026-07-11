@@ -1,11 +1,30 @@
 from uuid import UUID
 from fastapi import Depends, HTTPException, status, Request
+import secrets
 import logging # Import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.user import User
 
 logger = logging.getLogger(__name__) # Add logger instance
+
+async def validate_csrf(request: Request) -> None:
+    """Require a session-bound token for every state-changing request."""
+    if request.method in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+        return
+
+    session_token = request.session.get("csrf_token")
+    header_token = request.headers.get("X-CSRF-Token")
+    if (
+        not isinstance(session_token, str)
+        or not isinstance(header_token, str)
+        or not secrets.compare_digest(session_token, header_token)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid CSRF token",
+        )
+
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     user_id = request.session.get("user")
     if not user_id:
