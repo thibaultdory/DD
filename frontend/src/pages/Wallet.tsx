@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Box, 
   Typography, 
@@ -54,6 +54,8 @@ const WalletPage: React.FC = () => {
   const [convertAmount, setConvertAmount] = useState<number>(0);
   const [convertError, setConvertError] = useState<string | null>(null);
   const [convertComment, setConvertComment] = useState<string>('');
+  const [convertLoading, setConvertLoading] = useState(false);
+  const convertRequestInFlight = useRef(false);
   
   // Admin reprocess states
   const [reprocessStartDate, setReprocessStartDate] = useState<string>('');
@@ -155,22 +157,31 @@ const WalletPage: React.FC = () => {
   };
 
   const handleConvertToRealMoney = async () => {
+    if (convertRequestInFlight.current) return;
+
+    if (!selectedChild && !authState.currentUser) return;
+
+    const childId = selectedChild || (authState.currentUser?.id || '');
+
+    if (convertAmount <= 0) {
+      setConvertError('Le montant doit être supérieur à 0');
+      return;
+    }
+
+    convertRequestInFlight.current = true;
+    setConvertLoading(true);
+    setConvertError(null);
+
     try {
-      if (!selectedChild && !authState.currentUser) return;
-      
-      const childId = selectedChild || (authState.currentUser?.id || '');
-      
-      if (convertAmount <= 0) {
-        setConvertError('Le montant doit être supérieur à 0');
-        return;
-      }
-      
       // Allow overdraft: parent can convert more than current balance (creates debt)
       await walletService.convertToRealMoney(childId, convertAmount, convertComment);
       handleCloseConvertDialog();
     } catch (error) {
       console.error('Error converting to real money:', error);
       setConvertError('Une erreur est survenue lors de la conversion');
+    } finally {
+      convertRequestInFlight.current = false;
+      setConvertLoading(false);
     }
   };
 
@@ -481,7 +492,10 @@ const WalletPage: React.FC = () => {
           </TableContainer>
 
           {/* Dialogue de conversion en argent réel */}
-          <Dialog open={openConvertDialog} onClose={handleCloseConvertDialog}>
+          <Dialog
+            open={openConvertDialog}
+            onClose={convertLoading ? undefined : handleCloseConvertDialog}
+          >
             <DialogTitle>Convertir en euros réels</DialogTitle>
             <DialogContent>
               <Typography variant="body1" paragraph>
@@ -497,6 +511,7 @@ const WalletPage: React.FC = () => {
                 variant="outlined"
                 value={convertAmount || ''}
                 onChange={handleConvertAmountChange}
+                disabled={convertLoading}
                 inputProps={{ min: 0, step: 0.1 }}
                 error={!!convertError}
                 helperText={convertError}
@@ -511,19 +526,23 @@ const WalletPage: React.FC = () => {
                 variant="outlined"
                 value={convertComment}
                 onChange={handleConvertCommentChange}
+                disabled={convertLoading}
                 placeholder="ex: Achat jouet, argent de poche..."
                 helperText="Si laissé vide, utilisera 'Conversion en euros réels'"
               />
             </DialogContent>
             <DialogActions>
-              <Button onClick={handleCloseConvertDialog}>Annuler</Button>
+              <Button onClick={handleCloseConvertDialog} disabled={convertLoading}>
+                Annuler
+              </Button>
               <Button 
                 onClick={handleConvertToRealMoney} 
                 variant="contained"
                 color="primary"
-                disabled={!convertAmount || convertAmount <= 0}
+                disabled={convertLoading || !convertAmount || convertAmount <= 0}
+                startIcon={convertLoading ? <CircularProgress size={20} color="inherit" /> : undefined}
               >
-                Convertir
+                {convertLoading ? 'Conversion...' : 'Convertir'}
               </Button>
             </DialogActions>
           </Dialog>

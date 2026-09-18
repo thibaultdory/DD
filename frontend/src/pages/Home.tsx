@@ -315,53 +315,62 @@ const Home: React.FC = () => {
     loadTypeRef.current = null; // Reset the load type ref after handling
   }, [timelineItems]); // This effect depends on timelineItems changing
 
-  // Auto-scroll to today's items on initial load (only once)
-  useEffect(() => {
-    if (timelineItems.length > 0 && !loading && !initialLoading && !hasAutoScrolled.current) {
-      const timer = setTimeout(() => {
-        const todayItem = timelineItems.find(item => 
-          isSameDay(parseISO(item.date), new Date())
-        );
-        
-        if (todayItem && scrollContainerRef.current) {
-          const itemElement = scrollContainerRef.current.querySelector(`[data-item-id="${todayItem.id}"]`);
-          if (itemElement) {
-            itemElement.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'start' // Changed to 'start' for better positioning in chronological view
-            });
-          }
-        } else {
-          // If no today item found, scroll to approximately where today would be
-          const scrollContainer = scrollContainerRef.current;
-          if (scrollContainer) {
-            const today = new Date();
-            const containerHeight = scrollContainer.scrollHeight;
-            const containerClientHeight = scrollContainer.clientHeight;
-            
-            // Find the relative position of today in the date range
-            const startTime = dateRange.start.getTime();
-            const endTime = dateRange.end.getTime();
-            const todayTime = today.getTime();
-            
-            if (todayTime >= startTime && todayTime <= endTime) {
-              const relativePosition = (todayTime - startTime) / (endTime - startTime);
-              const scrollPosition = Math.max(0, (containerHeight - containerClientHeight) * relativePosition);
-              
-              scrollContainer.scrollTo({
-                top: scrollPosition,
-                behavior: 'smooth'
-              });
-            }
-          }
-        }
-      }, 1000); // Increased timeout to ensure data is fully rendered
-      
-      hasAutoScrolled.current = true;
-      
-      return () => clearTimeout(timer);
+  // Auto-scroll to today's section on initial load after layout is stable.
+  useLayoutEffect(() => {
+    if (
+      hasAutoScrolled.current ||
+      timelineItems.length === 0 ||
+      loading ||
+      initialLoading ||
+      !scrollContainerRef.current ||
+      !initialTimelineLoaded
+    ) {
+      return;
     }
-  }, [timelineItems, loading, initialLoading, dateRange]); // Added dateRange to dependencies
+
+    if (authState.currentUser?.isParent && children.length > 0 && !selectedChild) {
+      return;
+    }
+
+    const animationFrame = requestAnimationFrame(() => {
+      const scrollContainer = scrollContainerRef.current;
+      if (!scrollContainer || hasAutoScrolled.current) return;
+
+      const todayDateKey = format(new Date(), 'yyyy-MM-dd');
+      const todaySection = scrollContainer.querySelector<HTMLElement>(`[data-timeline-date="${todayDateKey}"]`);
+
+      if (todaySection) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const sectionRect = todaySection.getBoundingClientRect();
+        scrollContainer.scrollTop += sectionRect.top - containerRect.top;
+        hasAutoScrolled.current = true;
+        return;
+      }
+
+      const today = startOfDay(new Date());
+      const rangeStart = startOfDay(dateRange.start);
+      const rangeEnd = startOfDay(dateRange.end);
+      const rangeDuration = rangeEnd.getTime() - rangeStart.getTime();
+
+      if (rangeDuration > 0 && today >= rangeStart && today <= rangeEnd) {
+        const relativePosition = (today.getTime() - rangeStart.getTime()) / rangeDuration;
+        const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+        scrollContainer.scrollTop = maxScrollTop * relativePosition;
+        hasAutoScrolled.current = true;
+      }
+    });
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [
+    timelineItems,
+    loading,
+    initialLoading,
+    initialTimelineLoaded,
+    dateRange,
+    authState.currentUser,
+    children.length,
+    selectedChild
+  ]);
 
   // Load more data in past direction - PREPEND new items to beginning
   const loadPastData = useCallback(async () => {
@@ -604,7 +613,7 @@ const Home: React.FC = () => {
 
   // Group timeline items by date
   const groupedItems = timelineItems.reduce((groups, item) => {
-    const date = item.date;
+    const date = format(startOfDay(parseISO(item.date)), 'yyyy-MM-dd');
     if (!groups[date]) {
       groups[date] = [];
     }
@@ -786,7 +795,7 @@ const Home: React.FC = () => {
                 const parsedDate = parseISO(date);
 
                 return (
-                  <Box key={date} sx={{ mb: 2 }}>
+                  <Box key={date} data-timeline-date={date} sx={{ mb: 2 }}>
                     {/* Date Header */}
                     <Box sx={{ 
                       p: 2, 

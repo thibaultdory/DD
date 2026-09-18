@@ -11,6 +11,6 @@ export default defineConfig({
     headers: {
       'Access-Control-Allow-Origin': '*',
     },
-    allowedHosts: ['*'],
+    allowedHosts: ['dd.ethzero.club', 'localhost', '127.0.0.1'],
   },
 })
