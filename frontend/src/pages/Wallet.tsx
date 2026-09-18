@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import { 
   Box, 
   Typography, 
@@ -47,7 +48,8 @@ const WalletPage: React.FC = () => {
   const { authState } = useAuth();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [walletLoading, setWalletLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedChild, setSelectedChild] = useState<string | null>(null);
   const [openConvertDialog, setOpenConvertDialog] = useState(false);
@@ -85,9 +87,11 @@ const WalletPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let active = true;
+
     const fetchWalletData = async () => {
       try {
-        setLoading(true);
+        setWalletLoading(true);
         setError(null);
 
         // Déterminer l'ID de l'enfant dont on veut voir le portefeuille
@@ -96,17 +100,26 @@ const WalletPage: React.FC = () => {
           : authState.currentUser?.id;
 
         if (childId) {
-          const fetchedWallet = await walletService.getChildWallet(childId);
-          const fetchedTransactions = await walletService.getWalletTransactions(childId);
-          
-          setWallet(fetchedWallet);
-          setTransactions(fetchedTransactions);
+          const [fetchedWallet, fetchedTransactions] = await Promise.all([
+            walletService.getChildWallet(childId),
+            walletService.getWalletTransactions(childId),
+          ]);
+
+          if (active) {
+            setWallet(fetchedWallet);
+            setTransactions(fetchedTransactions);
+          }
         }
       } catch (error) {
         console.error('Error fetching wallet data:', error);
-        setError('Erreur lors de la récupération des données du portefeuille');
+        if (active) {
+          setError('Erreur lors de la récupération des données du portefeuille');
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setWalletLoading(false);
+          setInitialLoading(false);
+        }
       }
     };
 
@@ -122,18 +135,32 @@ const WalletPage: React.FC = () => {
           : authState.currentUser.id;
         
         if (childId) {
-          walletService.getChildWallet(childId).then(setWallet);
-          walletService.getWalletTransactions(childId).then(setTransactions);
+          Promise.all([
+            walletService.getChildWallet(childId),
+            walletService.getWalletTransactions(childId),
+          ]).then(([fetchedWallet, fetchedTransactions]) => {
+            if (active) {
+              setWallet(fetchedWallet);
+              setTransactions(fetchedTransactions);
+            }
+          });
         }
       }
     });
 
     return () => {
+      active = false;
       unsubscribe();
     };
   }, [authState.currentUser, selectedChild]);
 
   const handleChildSelect = (childId: string) => {
+    if (childId === selectedChild) return;
+
+    setWallet(null);
+    setTransactions([]);
+    setError(null);
+    setWalletLoading(true);
     setSelectedChild(childId);
   };
 
@@ -211,10 +238,11 @@ const WalletPage: React.FC = () => {
           `€${result.summary.total_amount_credited.toFixed(2)} crédités au total.`
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error reprocessing rewards:', error);
+      const responseDetail = axios.isAxiosError(error) ? error.response?.data?.detail : null;
       setReprocessError(
-        error.response?.data?.detail || 
+        typeof responseDetail === 'string' ? responseDetail :
         'Une erreur est survenue lors du retraitement des récompenses'
       );
     } finally {
@@ -232,23 +260,15 @@ const WalletPage: React.FC = () => {
   const formatDate = (dateString: string): string => {
     try {
       return format(parseISO(dateString), 'dd MMMM yyyy', { locale: fr });
-    } catch (error) {
+    } catch {
       return dateString;
     }
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <Layout>
         <Typography>Chargement...</Typography>
-      </Layout>
-    );
-  }
-
-  if (error) {
-    return (
-      <Layout>
-        <Alert severity="error">{error}</Alert>
       </Layout>
     );
   }
@@ -408,7 +428,19 @@ const WalletPage: React.FC = () => {
         </Card>
       )}
 
-      {wallet && (
+      {error && (
+        <Alert severity="error" sx={{ mb: 4 }}>
+          {error}
+        </Alert>
+      )}
+
+      {walletLoading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+          <CircularProgress aria-label="Chargement du portefeuille" />
+        </Box>
+      )}
+
+      {!walletLoading && wallet && (
         <>
           <Card sx={{ mb: 4 }}>
             <CardContent>
